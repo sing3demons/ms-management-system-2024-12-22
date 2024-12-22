@@ -1,0 +1,31 @@
+GET http://localhost:8080/users HTTP/1.1
+
+###
+POST http://localhost:3001/register HTTP/1.1
+content-type: application/json
+
+{
+  "username": "test",
+  "email": "test@dev.com",
+  "password": "test"
+}
+
+###
+POST http://localhost:3001/login HTTP/1.1
+content-type: application/json
+
+{
+  "email": "test@dev.com",
+  "password": "test"
+}
+
+###
+POST http://localhost:8080/mail HTTP/1.1
+content-type: application/json
+
+{
+    "from": "dev@test.com",
+    "to": "test@dev.com",
+    "subject": "Verify Email",
+    "body": "http://localhost:8080/verify/08f1738804a8b1a7ca0cd65c40c842611867da4072b496e0b9e918e48a056763"
+}

@@ -1,0 +1,133 @@
+networks:
+  ms-service:
+    name: ms-service
+services:
+  
+  db:
+    image: postgres:17.1-alpine3.20
+    restart: always
+    shm_size: 128mb
+    environment:
+      - POSTGRES_DB=auth
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=syspass
+    ports:
+      - 5432:5432
+    networks:
+      - ms-service
+  redis:
+    image: redis:6.2-alpine
+    restart: always
+    ports:
+      - 6379:6379
+    networks:
+      - ms-service
+  mongo:
+      image: mongo:5
+      container_name: mongodb
+      # volumes:
+      #   - ./data/mongo:/data/db
+      ports:
+        - 27017:27017
+      networks:
+      - ms-service
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.8.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    expose:
+      - 2181
+    networks:
+      - ms-service
+    # ports:
+    #   - 2181:2181
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    depends_on:
+      - zookeeper
+    networks:
+      - ms-service
+    ports:
+      - 9092:9092
+      - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  mailhog:
+    image: mailhog/mailhog
+    networks:
+      - ms-service
+    ports:
+      - 1025:1025
+      - 8025:8025
+  # filebeat:
+  #   image: docker.elastic.co/beats/filebeat:8.10.1
+  #   container_name: filebeat
+  #   user: root
+  #   volumes:
+  #     - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+  #     - ./profile-service/logs/app:/var/log/app
+  #     - ./profile-service/logs/detail:/var/log/detail
+  #     - ./profile-service/logs/summary:/var/log/summary
+  #   environment:
+  #     - ELASTICSEARCH_HOST=http://elasticsearch:9200
+  #   depends_on:
+  #     - elasticsearch
+  #   networks:
+  #     - ms-service
+  # elasticsearch:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.10.1
+  #   container_name: elasticsearch
+  #   environment:
+  #     - discovery.type=single-node
+
+  #   ports:
+  #     - "9200:9200"
+  #   networks:
+  #     - ms-service
+  # kibana:
+  #   image: docker.elastic.co/kibana/kibana:8.10.1
+  #   container_name: kibana
+  #   volumes:
+  #     - "./kibana.yml:/usr/share/kibana/config/kibana.yml"
+  #   restart: always
+  #   ports:
+  #     - "5601:5601"
+  #   depends_on:
+  #     - elasticsearch
+  #   networks:
+  #     - ms-service
+  # logstash:
+  #   image: docker.elastic.co/logstash/logstash:8.10.1
+  #   container_name: logstash
+  #   volumes:
+  #     - "./logstash.conf:/usr/share/logstash/pipeline/logstash.conf"
+  #   restart: always
+  #   command: logstash -f /usr/share/logstash/pipeline/logstash.conf
+  #   networks:
+  #     - ms-service
+  #   expose:
+  #     - "9600"
+  #     - "7777"
+  #   depends_on:
+  #     - elasticsearch  
+  # kafka-ui:
+  #   container_name: kafka-ui
+  #   image: provectuslabs/kafka-ui:latest
+  #   ports:
+  #     - 8081:8080
+  #   depends_on:
+  #     - "kafka"
+  #   environment:
+  #     KAFKA_CLUSTERS_0_NAME: kafka
+  #     KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+  #     DYNAMIC_CONFIG_ENABLED: 'true'  # not necessary, added for tests
+  #     KAFKA_CLUSTERS_0_AUDIT_TOPICAUDITENABLED: 'true'
+  #     KAFKA_CLUSTERS_0_AUDIT_CONSOLEAUDITENABLED: 'true'
+  #   networks:
+  #     - ms-service

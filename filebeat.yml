@@ -1,0 +1,49 @@
+filebeat.inputs:
+  # Input for app logs
+  - type: filestream
+    paths:
+      - /var/log/app/*.log  # Path for app logs
+    close_inactive: 5m
+    clean_inactive: 1h
+    clean_removed: true
+    fields:
+      log_type: app
+    fields_under_root: true
+
+  # Input for detail logs
+  - type: filestream
+    paths:
+      - /var/log/detail/*.log  # Path for detail logs
+    close_inactive: 5m
+    clean_inactive: 1h
+    clean_removed: true
+    fields:
+      log_type: detail
+    fields_under_root: true
+
+  # Input for summary logs
+  - type: filestream
+    paths:
+      - /var/log/summary/*.log  # Path for summary logs
+    close_inactive: 5m
+    clean_inactive: 1h
+    clean_removed: true
+    fields:
+      log_type: summary
+    fields_under_root: true
+
+output.kafka:
+  hosts: ["kafka:9092"]
+  topic: "write-logs"
+  partition.round_robin:
+    reachable_only: false
+  required_acks: 1
+  compression: gzip
+  max_message_bytes: 1000000
+
+logging.json: true
+logging.metrics.enabled: false
+# Template Setup for Dynamic Indices
+setup.template.name: "logs"
+setup.template.pattern: "logs-*"
+setup.template.enabled: true

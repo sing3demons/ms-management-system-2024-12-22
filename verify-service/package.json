@@ -1,0 +1,40 @@
+{
+  "name": "verify-service",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.13",
+    "axios": "^1.7.9",
+    "axios-retry": "^4.5.0",
+    "dayjs": "^1.11.13",
+    "express": "^4.21.2",
+    "fastify": "^5.2.0",
+    "kafkajs": "^2.2.4",
+    "mongoose": "^8.9.2",
+    "nanoid": "^5.0.9",
+    "rotating-file-stream": "^3.2.5",
+    "useragent": "^2.3.0",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@babel/preset-typescript": "^7.26.0",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.2",
+    "@types/useragent": "^2.3.4",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
