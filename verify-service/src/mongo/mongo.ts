@@ -1,4 +1,4 @@
-import { connect, Model, Schema } from 'mongoose'
+import { connect, Model } from 'mongoose'
 
 type EMethod =
   | 'create'
@@ -21,6 +21,10 @@ type ResultMongo = {
     Body: any
     RawData: string
   }
+  ingoing_detail: {
+    Body: any
+    RawData: string
+  }
 }
 
 async function initMongo() {
@@ -40,16 +44,16 @@ type TDocument<T> = {
   projection?: Record<string, any>
 }
 
-async function mongo<T extends Schema = any>(
-  model: Model<T>,
-  method: EMethod,
-  document: TDocument<T>
-): Promise<ResultMongo> {
+async function mongo<T>(model: Model<T>, method: EMethod, document: TDocument<T>): Promise<ResultMongo> {
   const result = {
     err: false,
     result_desc: 'success',
     result_data: {},
     outgoing_detail: {
+      Body: {},
+      RawData: '',
+    },
+    ingoing_detail: {
       Body: {},
       RawData: '',
     },
@@ -90,6 +94,10 @@ async function mongo<T extends Schema = any>(
         }
 
         result.result_data = insertResult
+        result.ingoing_detail = {
+          Body: { Return: insertResult },
+          RawData: JSON.stringify(insertResult),
+        }
 
         return result
 
@@ -120,6 +128,11 @@ async function mongo<T extends Schema = any>(
           throw new Error('Update failed')
         }
         result.result_data = updateResult
+
+        result.ingoing_detail = {
+          Body: { Return: updateResult },
+          RawData: JSON.stringify(updateResult),
+        }
         return result
 
       case 'deleteOne':
@@ -133,7 +146,13 @@ async function mongo<T extends Schema = any>(
           throw new Error(`'filter' is required for ${method}`)
         }
 
-        result.result_data = await (model[method] as any)(document.filter, document.options)
+        const deleteResult = await (model[method] as any)(document.filter, document.options)
+        result.result_data = deleteResult
+
+        result.ingoing_detail = {
+          Body: { Return: deleteResult },
+          RawData: JSON.stringify(deleteResult),
+        }
         return result
 
       case 'findOne':
@@ -152,6 +171,11 @@ async function mongo<T extends Schema = any>(
         }
 
         result.result_data = findResult
+
+        result.ingoing_detail = {
+          Body: { Return: findResult },
+          RawData: JSON.stringify(findResult),
+        }
         return result
 
       case 'find':
@@ -170,8 +194,6 @@ async function mongo<T extends Schema = any>(
           document.new
         ).replace(/"/g, "'")}${document.options ? ',' + JSON.stringify(document.options).replace(/"/g, "'") : ''})`
         result.outgoing_detail = processReqLog
-
-        console.log(processReqLog.RawData)
 
         if (!document.filter || !document.new) {
           throw new Error(`'filter' and 'update' are required for ${method}`)
@@ -196,6 +218,11 @@ async function mongo<T extends Schema = any>(
         }
 
         result.result_data = result_data
+
+        result.ingoing_detail = {
+          Body: { Return: result_data },
+          RawData: JSON.stringify(result_data),
+        }
         return result
 
       default:
@@ -207,6 +234,11 @@ async function mongo<T extends Schema = any>(
 
     if (error instanceof Error) {
       result.result_desc = error.message
+    }
+
+    result.ingoing_detail = {
+      Body: { Return: error },
+      RawData: result.result_desc,
     }
 
     return result
