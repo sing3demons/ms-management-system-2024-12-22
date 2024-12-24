@@ -4,7 +4,7 @@ import DetailLog from '../logger/detail.js'
 import SummaryLog from '../logger/summary.js'
 import NODE_NAME from '../constants/nodeName.js'
 import generateInternalTid from './generateInternalTid.js'
-import { CtxConsumer } from '../kafka/kafka_server.js'
+import { CtxConsumer, TSchemaCtx } from '../kafka/kafka_server.js'
 
 type ExtractParams<Path extends string> = Path extends `${string}:${infer ParamName}/${infer Rest}`
   ? ParamName | ExtractParams<Rest>
@@ -299,12 +299,7 @@ interface IServer {
   consume<BodySchema extends TSchema, HeaderSchema extends TSchema>(
     pattern: string,
     handler: (ctx: CtxConsumer<Static<BodySchema>, Static<HeaderSchema>>) => Promise<any>,
-    // handler: HandlerConsumer,
-    schema?: {
-      body?: BodySchema
-      headers?: HeaderSchema
-      beforeHandle?: (ctx: CtxConsumer<Static<BodySchema>, Static<HeaderSchema>>) => Promise<void>
-    }
+    schema?: TSchemaCtx<BodySchema, HeaderSchema>
   ): void
 }
 

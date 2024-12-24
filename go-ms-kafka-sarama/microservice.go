@@ -12,7 +12,6 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
-	"github.com/sing3demons/saram-kafka/logger"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -53,7 +52,7 @@ func NewMicroservice(brokers, groupID string) *Microservice {
 	return &Microservice{
 		brokers: strings.Split(brokers, ","),
 		groupID: groupID,
-		Logger:  logger.NewLog(false, true),
+		Logger:  zap.NewNop(),
 	}
 }
 

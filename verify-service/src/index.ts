@@ -155,23 +155,20 @@ app.consume(
   }
 )
 
-// app.consume(
-//   TOPICS.SERVICE_VERIFY_CONFIRM,
-//   async ({ body, headers }) => {
-//     return { success: true }
-//   },
-//   {
-//     beforeHandle: async (ctx) => {
-//       ctx.body
-//     },
-//     body: verifySchema,
-//     headers: Type.Object({
-//       Authorization: Type.String({
-//         pattern: '/^Bearer .+$/',
-//       }),
-//     }),
-//   }
-// )
+app.consume(
+  TOPICS.SERVICE_VERIFY_CONFIRM,
+  async ({ body, headers }) => {
+    return { success: true }
+  },
+  {
+    body: verifySchema,
+    headers: Type.Object({
+      Authorization: Type.String({
+        pattern: '/^Bearer .+$/',
+      }),
+    }),
+  }
+)
 
 app.listen((err) => {
   if (err) {

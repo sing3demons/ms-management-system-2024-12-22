@@ -1,73 +1,114 @@
 package logger
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
+	"net/http"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-func NewLog(file, console bool) *zap.Logger {
-	if file {
-		return NewLogFile(console)
-	}
-	return NewLogger()
+type LogConfig struct {
+	ProjectName string
+	Namespace   string
+	Summary     SummaryLogConfig `json:"summary"`
+	Detail      DetailLogConfig  `json:"detail"`
 }
 
-func NewLogger() *zap.Logger {
-	var encCfg zapcore.EncoderConfig
-	encCfg.MessageKey = "msg"
-
-	w := zapcore.AddSync(os.Stdout)
-	core := zapcore.NewCore(zapcore.NewConsoleEncoder(encCfg), w, zap.InfoLevel)
-
-	log := zap.New(core)
-
-	return log
+type SummaryLogConfig struct {
+	Name       string `json:"name"`
+	RawData    bool   `json:"rawData"`
+	LogFile    bool   `json:"logFile"`
+	LogConsole bool   `json:"logConsole"`
+	LogSummary *zap.Logger
 }
 
-func NewLogFile(console bool) *zap.Logger {
-	// Create log file with rotating mechanism
-	const logDir = "./logs/app"
-	logFile := filepath.Join(logDir, getLogFileName(time.Now()))
-	if _, err := os.Stat(logDir); os.IsNotExist(err) {
-		err := os.MkdirAll(logDir, os.ModePerm)
-		if err != nil {
-			panic("failed to create log directory")
-		}
-	}
-
-	var encCfg zapcore.EncoderConfig
-	encCfg.MessageKey = "msg"
-
-	w := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   logFile,
-		MaxSize:    10, // megabytes
-		MaxBackups: 3,
-		MaxAge:     7,
-	})
-	if console {
-		w = zapcore.NewMultiWriteSyncer(w, zapcore.AddSync(os.Stdout))
-	}
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encCfg),
-		w,
-		zap.InfoLevel,
-	)
-	return zap.New(core)
+type DetailLogConfig struct {
+	Name       string `json:"name"`
+	RawData    bool   `json:"rawData"`
+	LogFile    bool   `json:"logFile"`
+	LogConsole bool   `json:"logConsole"`
+	LogDetail  *zap.Logger
 }
 
-func getLogFileName(t time.Time) string {
-	appName := os.Getenv("SERVICE_NAME")
-	if appName == "" {
-		appName = "go-service"
-	}
-	year, month, day := t.Date()
-	hour, minute, second := t.Clock()
-
-	return fmt.Sprintf("%s_%04d%02d%02d_%02d%02d%02d.log", appName, year, month, day, hour, minute, second)
+type InputOutputLog struct {
+	Invoke   string      `json:"Invoke"`
+	Event    string      `json:"Event"`
+	Protocol *string     `json:"Protocol,omitempty"`
+	Type     string      `json:"Type"`
+	RawData  interface{} `json:"RawData,omitempty"`
+	Data     interface{} `json:"Data"`
+	ResTime  *string     `json:"ResTime,omitempty"`
 }
+
+type detailLog struct {
+	LogType         string               `json:"LogType"`
+	Host            string               `json:"Host"`
+	AppName         string               `json:"AppName"`
+	Instance        *string              `json:"Instance,omitempty"`
+	Session         string               `json:"Session"`
+	InitInvoke      string               `json:"InitInvoke"`
+	Scenario        string               `json:"Scenario"`
+	Identity        string               `json:"Identity"`
+	InputTimeStamp  *string              `json:"InputTimeStamp,omitempty"`
+	Input           []InputOutputLog     `json:"Input"`
+	OutputTimeStamp *string              `json:"OutputTimeStamp,omitempty"`
+	Output          []InputOutputLog     `json:"Output"`
+	ProcessingTime  *string              `json:"ProcessingTime,omitempty"`
+	conf            DetailLogConfig      `json:"-"`
+	startTimeDate   time.Time            `json:"-"`
+	inputTime       *time.Time           `json:"-"`
+	outputTime      *time.Time           `json:"-"`
+	timeCounter     map[string]time.Time `json:"-"`
+	req             *http.Request
+	mu              sync.Mutex
+}
+
+type logEvent struct {
+	node           string
+	cmd            string
+	invoke         string
+	logType        string
+	rawData        interface{}
+	data           interface{}
+	resTime        string
+	protocol       string
+	protocolMethod string
+}
+
+type summaryLog struct {
+	mu            sync.Mutex
+	requestTime   *time.Time
+	session       string
+	initInvoke    string
+	cmd           string
+	blockDetail   []BlockDetail
+	optionalField OptionalFields
+	conf          LogConfig
+}
+
+type SummaryResult struct {
+	ResultCode string `json:"ResultCode"`
+	ResultDesc string `json:"ResultDesc"`
+	Count      int    `json:"-"`
+}
+
+type BlockDetail struct {
+	Node   string          `json:"Node"`
+	Cmd    string          `json:"Cmd"`
+	Result []SummaryResult `json:"Result"`
+	Count  int             `json:"Count"`
+}
+
+type OptionalFields map[string]interface{}
+
+type ContextKey string
+
+const (
+	TraceIDKey      ContextKey = "trace_id"
+	SpanIDKey       ContextKey = "span_id"
+	xSession         ContextKey = "session"
+	ContentType                = "Content-Type"
+	ContentTypeJSON            = "application/json"
+	ContentJson                = "application/json"
+)

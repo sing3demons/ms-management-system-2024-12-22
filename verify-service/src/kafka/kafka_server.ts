@@ -96,7 +96,7 @@ type ICtxProducer = {
   scenario: string
 }
 
-type TSchemaCtx<BodySchema extends TSchema, HeaderSchema extends TSchema> = {
+export type TSchemaCtx<BodySchema extends TSchema, HeaderSchema extends TSchema> = {
   body?: BodySchema
   headers?: HeaderSchema
   beforeHandle?: (ctx: CtxConsumer<Static<BodySchema>, Static<HeaderSchema>>) => Promise<any>
