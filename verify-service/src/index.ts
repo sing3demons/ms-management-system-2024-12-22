@@ -54,6 +54,10 @@ const verifySchema = Type.Object({
   id: Type.String(),
 })
 
+const headerSchema = Type.Object({
+  Authorization: Type.String({ pattern: '^Bearer .+$' }),
+})
+
 type User = {
   id: string
   email: string
@@ -143,16 +147,31 @@ app.consume(
 
     return { ...requestHttp, token: resultToken.result_data.token, success: true }
   },
-  { body: verifySchema }
+  {
+    body: verifySchema,
+    beforeHandle: async (ctx) => {
+      console.log('beforeHandle', ctx.body)
+    },
+  }
 )
 
-app.consume(
-  TOPICS.SERVICE_VERIFY_CONFIRM,
-  async ({ commonLog, value, body }) => {
-    return { success: true }
-  },
-  { body: verifySchema }
-)
+// app.consume(
+//   TOPICS.SERVICE_VERIFY_CONFIRM,
+//   async ({ body, headers }) => {
+//     return { success: true }
+//   },
+//   {
+//     beforeHandle: async (ctx) => {
+//       ctx.body
+//     },
+//     body: verifySchema,
+//     headers: Type.Object({
+//       Authorization: Type.String({
+//         pattern: '/^Bearer .+$/',
+//       }),
+//     }),
+//   }
+// )
 
 app.listen((err) => {
   if (err) {

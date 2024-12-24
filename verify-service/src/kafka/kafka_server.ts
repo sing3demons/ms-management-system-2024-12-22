@@ -8,9 +8,9 @@ import { SchemaCtx } from '../v2/route.js'
 import { v7 as uuid } from 'uuid'
 
 export type ServerKafkaOptions = {
-  client?: {
+  client: {
     clientId?: string
-    brokers?: string[]
+    brokers: string[]
     logLevel?: number
     retry?: {
       initialRetryTime?: number
@@ -96,24 +96,35 @@ type ICtxProducer = {
   scenario: string
 }
 
+type TSchemaCtx<BodySchema extends TSchema, HeaderSchema extends TSchema> = {
+  body?: BodySchema
+  headers?: HeaderSchema
+  beforeHandle?: (ctx: CtxConsumer<Static<BodySchema>, Static<HeaderSchema>>) => Promise<any>
+}
+
 export class ServerKafka {
   private client: Kafka | null = null
   private consumer: Consumer | null = null
   private producer: Producer | null = null
-  private brokers: string[]
+
   private clientId: string
   private groupId: string
   private options: ServerKafkaOptions
   private messageHandlers = new Map()
-  private schemaHandler = new Map<string, Omit<SchemaCtx, 'query'>>() // topic -> schema
+  private schemaHandler = new Map<
+    string,
+    {
+      body?: TSchema
+      headers?: TSchema
+      beforeHandle?: (ctx: CtxConsumer<Static<TSchema>, Static<TSchema>>) => Promise<any>
+    }
+  >() // topic -> schema
 
   constructor(options: ServerKafkaOptions) {
     this.options = options
     const clientOptions = options.client || {}
     const consumerOptions = options.consumer || {}
     const postfixId = options.postfixId ?? '-server'
-
-    this.brokers = clientOptions.brokers || ['localhost:9092']
     this.clientId = (clientOptions.clientId || 'kafka-client') + postfixId
     this.groupId = (consumerOptions.groupId || 'kafka-group-2') + postfixId
   }
@@ -156,9 +167,7 @@ export class ServerKafka {
   private createClient(): Kafka {
     const config: KafkaConfig = {
       clientId: this.clientId,
-      brokers: this.brokers,
       logLevel: this.options.client?.logLevel || 1,
-
       retry: {
         initialRetryTime: this.options.client?.retry?.initialRetryTime || 300,
         retries: this.options.client?.retry?.retries || 8,
@@ -233,6 +242,7 @@ export class ServerKafka {
         }
       }
 
+      const beforeHandle = this.schemaHandler.get(topic)?.beforeHandle
       const rawMessage: ParsedMessage = {
         topic,
         partition: payload.partition,
@@ -328,6 +338,10 @@ export class ServerKafka {
           }
         },
         sendMessage: async (topic: string, payload: any) => await this.sendMessage(topic, payload, ctx),
+      }
+
+      if (beforeHandle) {
+        await beforeHandle(kafkaContext as unknown as CtxConsumer)
       }
 
       const response = await handler(kafkaContext)
@@ -467,14 +481,46 @@ export class ServerKafka {
     return this.messageHandlers.get(pattern)
   }
 
-  public consume<Schema extends Omit<SchemaCtx, 'query'>>(
+  // public consume<Schema extends Omit<SchemaCtx, 'query'>>(
+  //   pattern: string,
+  //   handler: MessageHandler<Schema>,
+  //   schema?: Schema
+  // ): void {
+  //   this.messageHandlers.set(pattern, handler)
+  //   if (schema) {
+  //     this.schemaHandler.set(pattern, schema)
+  //   }
+  // }
+
+  public consume<BodySchema extends TSchema, HeaderSchema extends TSchema>(
     pattern: string,
-    handler: MessageHandler<Schema>,
-    schema?: Schema
+    handler: (ctx: CtxConsumer<Static<BodySchema>, Static<HeaderSchema>>) => Promise<any>,
+    schema?: TSchemaCtx<BodySchema, HeaderSchema>
   ): void {
     this.messageHandlers.set(pattern, handler)
     if (schema) {
       this.schemaHandler.set(pattern, schema)
     }
   }
+}
+
+export type CtxConsumer<Body = unknown, Headers = unknown> = {
+  body: Body
+  headers: Headers
+  setHeaders: (headers: Record<string, string>) => void
+  commonLog: (
+    scenario: string,
+    identity?: string
+  ) => {
+    detailLog: DetailLog
+    summaryLog: SummaryLog
+    initInvoke: string
+  }
+  response: (code: number, data: any) => void
+  redirect: (url: string, code?: number) => void
+}
+
+export type SchemaCtxConsumer<BodySchema extends TSchema = TSchema, HeaderSchema extends TSchema = TSchema> = {
+  body?: Static<BodySchema>
+  headers?: Static<HeaderSchema>
 }
