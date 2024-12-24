@@ -98,9 +98,9 @@ export default class DetailLog {
   }
 
   private validateData = (data: any): boolean => {
-    const { headers, params, query, body } = data
+    const { header, params, query, body } = data
 
-    if (headers) return true
+    if (header || typeof header === 'object') return true
 
     if (params || typeof params === 'object') {
       return true
@@ -119,7 +119,7 @@ export default class DetailLog {
 
   addInputRequest(node: string, cmd: string, invoke: string, req: any): void {
     const data = {
-      headers: {
+      header: {
         device: req?.deviceInfo,
         session: req?.session,
         userId: req?.userId,

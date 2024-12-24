@@ -1,4 +1,4 @@
-import { connect, Model } from 'mongoose'
+import { connect, ConnectOptions, Model } from 'mongoose'
 
 type EMethod =
   | 'create'
@@ -27,9 +27,15 @@ type ResultMongo = {
   }
 }
 
-async function initMongo() {
+interface DbConnection extends ConnectOptions {
+  url: string
+}
+
+async function initMongo(conn: DbConnection) {
   try {
-    await connect('mongodb://localhost:27017/verify-service')
+    const { url, ...options } = conn
+    await connect(url, options)
+
     console.log('Database connected')
   } catch (error) {
     console.error('Database connection failed')
