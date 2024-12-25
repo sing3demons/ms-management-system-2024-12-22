@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sing3demons/profile-service/logger"
+	"github.com/sing3demons/logger-kp/logger"
 )
 
 type TMap map[string]string
@@ -28,16 +28,6 @@ const (
 	PUT    HTTPMethod = "PUT"
 	DELETE HTTPMethod = "DELETE"
 )
-
-// type HTTPMethod int
-
-// const (
-// 	GET HTTPMethod = iota
-// 	POST
-// 	PUT
-// 	PATCH
-// 	DELETE
-// )
 
 type RequestAttributes struct {
 	Headers        TMap
@@ -160,7 +150,7 @@ func (svc *httpService) requestHttp() (any, error) {
 		method := response.attr.Method
 
 		resultCode := fmt.Sprintf("%d", response.Status)
-		svc.summaryLog.AddSuccessBlock(service, command, resultCode, response.StatusText)
+		svc.summaryLog.AddSuccess(service, command, resultCode, response.StatusText)
 		// remove attr from response
 		// delete(response.Body, "attr")
 		svc.detailLog.AddInputResponse(service, command, invoke, nil, response, "http", string(method))
@@ -241,7 +231,7 @@ func createRequest(
 	req, err := http.NewRequestWithContext(ctx, string(attr.Method), attr.URL, body)
 	if err != nil {
 		// detailLog.AutoEnd()
-		summaryLog.AddErrorBlock(attr.Service, attr.Command, "500", err.Error())
+		summaryLog.AddError(attr.Service, attr.Command, "500", err.Error())
 		// detailLog.AddInputResponse(attr.Service, attr.Command, attr.Invoke, err.Error(), err.Error(), "http", string(attr.Method))
 		return nil, err
 	}
