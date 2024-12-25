@@ -33,7 +33,6 @@ func (h *HTTPContext) ReadInput() InComing {
 	bodyBytes, err := io.ReadAll(h.Req.Body)
 	if err != nil {
 		return data
-
 	}
 
 	h.Req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))

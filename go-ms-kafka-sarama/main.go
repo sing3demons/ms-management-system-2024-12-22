@@ -1,57 +1,56 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
+
+	"github.com/sing3demons/logger-kp/logger"
 )
 
 func init() {
-	if os.Getenv("SERVICE_NAME") == "" {
-		file, err := os.Open("go.mod")
-		if err != nil {
-			fmt.Printf("Error opening go.mod: %v\n", err)
-			return
-		}
-		defer file.Close()
-
-		var projectName string
-		// Scan the file line by line
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			line := scanner.Text()
-			// Check for the "module" directive
-			if strings.HasPrefix(line, "module") {
-				// Extract the module name
-				moduleName := strings.TrimSpace(strings.TrimPrefix(line, "module"))
-				// Get the last part of the module name
-				projectName = filepath.Base(moduleName)
-				fmt.Println("Project Name:", projectName)
-			}
-		}
-
-		// Handle any scanning errors
-		if err := scanner.Err(); err != nil {
-			fmt.Printf("Error reading go.mod: %v\n", err)
-		}
-
-		os.Setenv("SERVICE_NAME", projectName)
-	}
+	logger.LoadLogConfig(logger.LogConfig{
+		Summary: logger.SummaryLogConfig{
+			LogFile:    false,
+			LogConsole: true,
+		},
+		// Detail: logger.DetailLogConfig{
+		// 	LogFile:    false,
+		// 	LogConsole: false,
+		// },
+	})
 }
+
+const (
+	ServiceRegisterTopic = "service.register"
+)
 
 func main() {
 	servers := "localhost:29092"
 	groupID := "example-group"
-	ms := NewMicroservice(servers, groupID)
-	err := ms.Consume("service.register", func(ctx IContext) error {
 
-		data := map[string]any{}
-		json.Unmarshal([]byte(ctx.ReadInput()), &data)
+	ms := NewApplication(servers, groupID)
+	ms.Log("Starting microservice")
+	err := ms.Consume(ServiceRegisterTopic, func(ctx IContext) error {
+		appLog := ctx.L()
+		appLog.Info("Registering service")
+		_, summaryLog := ctx.CommonLog(ServiceRegisterTopic)
 
-		ctx.Log("Processing", data)
+		summaryLog.AddSuccess("kafka_consumer", "register", "", "success")
+
+		err := ctx.SendMessage("service.verify", map[string]any{
+			"email": "test@dev.com",
+		})
+		if err != nil {
+			ctx.Response(500, map[string]any{
+				"error": err.Error(),
+			})
+			return err
+		}
+
+		summaryLog.AddSuccess("kafka_producer", "service.verify", "", "success")
+
+		ctx.Response(200, map[string]any{
+			"message": "success",
+		})
 		return nil
 	})
 	if err != nil {
