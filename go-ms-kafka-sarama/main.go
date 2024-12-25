@@ -8,6 +8,9 @@ import (
 
 func init() {
 	logger.LoadLogConfig(logger.LogConfig{
+		AppLog: logger.AppLog{
+			LogConsole: true,
+		},
 		Summary: logger.SummaryLogConfig{
 			LogFile:    false,
 			LogConsole: true,
