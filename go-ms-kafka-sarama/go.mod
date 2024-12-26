@@ -5,7 +5,7 @@ go 1.23.4
 require (
 	github.com/IBM/sarama v1.43.3
 	github.com/google/uuid v1.6.0
-	github.com/sing3demons/logger-kp v1.0.5
+	github.com/sing3demons/logger-kp v1.0.6
 	go.mongodb.org/mongo-driver v1.17.1
 	go.uber.org/zap v1.27.0
 	gopkg.in/mail.v2 v2.3.1

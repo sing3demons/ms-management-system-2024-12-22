@@ -1,15 +1,16 @@
 import NODE_NAME from './constants/nodeName.js'
 import TOPICS from './constants/topics.js'
-import { ServerKafka } from './kafka/kafka_server.js'
+import { CtxConsumer, ServerKafka } from './kafka/kafka_server.js'
 import { loadLogConfig } from './logger/logger.js'
-import { Type } from '@sinclair/typebox'
-import TokenModel from './schema/token.model.js'
+import { Static, TSchema, Type } from '@sinclair/typebox'
+import TokenModel from './mongo/models/token.model.js'
 import crypto from 'crypto'
 import { DetailLog, SummaryLog } from './logger/index.js'
 import generateInternalTid from './v2/generateInternalTid.js'
 import { HttpService } from './v2/http-service.js'
 import { initMongo, mongo } from './mongo/mongo.js'
 import { initPostgres, sql } from './sql/pg.js'
+import { verifySchema, VerifySchemaType } from './schema/verify.schema.js'
 
 loadLogConfig({
   detail: {
@@ -48,16 +49,6 @@ const app = new ServerKafka({
   },
 })
 
-const verifySchema = Type.Object({
-  email: Type.Optional(Type.String()),
-  username: Type.Optional(Type.String()),
-  id: Type.String(),
-})
-
-const headerSchema = Type.Object({
-  Authorization: Type.String({ pattern: '^Bearer .+$' }),
-})
-
 type User = {
   id: string
   email: string
@@ -75,85 +66,76 @@ type User = {
   display_name?: string
   profile_image?: string
 }
+async function verifyHandler({ commonLog, body }: CtxConsumer<VerifySchemaType>) {
+  const { detailLog, summaryLog } = commonLog(TOPICS.SERVICE_REGISTER)
 
-app.consume(
-  TOPICS.SERVICE_VERIFY,
-  async ({ commonLog, body }) => {
-    const { detailLog, summaryLog } = commonLog(TOPICS.SERVICE_REGISTER)
+  summaryLog.addSuccessBlock(NODE_NAME.KAFKA_CONSUMER, TOPICS.SERVICE_REGISTER, 'null', 'success')
 
-    summaryLog.addSuccessBlock(NODE_NAME.KAFKA_CONSUMER, TOPICS.SERVICE_REGISTER, 'null', 'success')
+  const data = await sql<User>('FIND_ONE', { table: 'Profile', condition: 'id = $1', conditionParams: [body.id] })
+  const invokePostgres = generateInternalTid('postgres', '-', 20)
+  detailLog
+    .addOutputRequest(NODE_NAME.POSTGRES, 'find_one', invokePostgres, data.outgoing_detail.Query, data.outgoing_detail)
+    .end()
 
-    const data = await sql<User>('FIND_ONE', { table: 'Profile', condition: 'id = $1', conditionParams: [body.id] })
-    const invokePostgres = generateInternalTid('postgres', '-', 20)
-    detailLog
-      .addOutputRequest(
-        NODE_NAME.POSTGRES,
-        'find_one',
-        invokePostgres,
-        data.outgoing_detail.Query,
-        data.outgoing_detail
-      )
-      .end()
-
-    if (data.err) {
-      summaryLog.addErrorBlock(NODE_NAME.POSTGRES, 'find_one', '500', data.result_desc)
-      detailLog.addInputResponseError(NODE_NAME.POSTGRES, 'find_one', invokePostgres, data.result_desc)
-      return {
-        err: data.err,
-        result_desc: data.result_desc,
-        result_data: data.result_data,
-        success: false,
-      }
+  if (data.err) {
+    summaryLog.addErrorBlock(NODE_NAME.POSTGRES, 'find_one', '500', data.result_desc)
+    detailLog.addInputResponseError(NODE_NAME.POSTGRES, 'find_one', invokePostgres, data.result_desc)
+    return {
+      err: data.err,
+      result_desc: data.result_desc,
+      result_data: data.result_data,
+      success: false,
     }
-
-    summaryLog.addSuccessBlock(NODE_NAME.POSTGRES, 'find_one', '200', data.result_desc)
-    detailLog.addInputResponse(
-      NODE_NAME.POSTGRES,
-      'find_one',
-      invokePostgres,
-      data.ingoing_detail.RawData,
-      data.ingoing_detail.Body
-    )
-
-    const resultToken = await insertToken(body, detailLog, summaryLog)
-    if (resultToken.err) {
-      return {
-        ...resultToken,
-        success: false,
-      }
-    }
-    const requestHttp = await HttpService.requestHttp(
-      {
-        _command: 'send_email',
-        _invoke: generateInternalTid('send_email', '-', 20),
-        _service: 'email_service',
-        body: {
-          from: 'dev@test.com',
-          to: body.email || 'test@test.com',
-          subject: 'Verify Email',
-          body: `http://localhost:8080/verify/${resultToken.result_data.token}`,
-        },
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        method: 'POST',
-        url: 'http://localhost:8080/mail',
-      },
-      detailLog,
-      summaryLog
-    )
-
-    summaryLog.addSuccessBlock('email_service', 'send_email', '200', 'success')
-
-    return { ...requestHttp, token: resultToken.result_data.token, success: true }
-  },
-  {
-    body: verifySchema,
-    beforeHandle: async (ctx) => {
-      console.log('beforeHandle', ctx.body)
-    },
   }
-)
+
+  summaryLog.addSuccessBlock(NODE_NAME.POSTGRES, 'find_one', '200', data.result_desc)
+  detailLog.addInputResponse(
+    NODE_NAME.POSTGRES,
+    'find_one',
+    invokePostgres,
+    data.ingoing_detail.RawData,
+    data.ingoing_detail.Body
+  )
+
+  const resultToken = await insertToken(body, detailLog, summaryLog)
+  if (resultToken.err) {
+    return {
+      ...resultToken,
+      success: false,
+    }
+  }
+  const requestHttp = await HttpService.requestHttp(
+    {
+      _command: 'send_email',
+      _invoke: generateInternalTid('send_email', '-', 20),
+      _service: 'email_service',
+      body: {
+        from: 'dev@test.com',
+        to: body.email || 'test@test.com',
+        subject: 'Verify Email',
+        body: `http://localhost:8080/verify/${resultToken.result_data.token}`,
+      },
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      url: 'http://localhost:8080/mail',
+    },
+    detailLog,
+    summaryLog
+  )
+
+  summaryLog.addSuccessBlock('email_service', 'send_email', '200', 'success')
+
+  return { ...requestHttp, token: resultToken.result_data.token, success: true }
+}
+
+app.consume(TOPICS.SERVICE_VERIFY, async (c) => verifyHandler(c), {
+  body: verifySchema,
+  beforeHandle: async (ctx) => {
+    console.log('beforeHandle', ctx.body)
+  },
+})
 
 app.consume(
   TOPICS.SERVICE_VERIFY_CONFIRM,

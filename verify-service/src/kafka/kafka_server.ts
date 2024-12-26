@@ -40,7 +40,7 @@ export type KafkaContext<Schema extends SchemaCtx> = {
   value: string
   commonLog: (
     scenario: string,
-    identity?: string
+    validate?: boolean
   ) => {
     detailLog: DetailLog
     summaryLog: SummaryLog
@@ -67,6 +67,10 @@ type BaseResponse = {
 
 export type MessageHandler<Schema extends SchemaCtx> = (
   context: KafkaContext<Schema>
+) => Promise<BaseResponse> | BaseResponse
+
+export type ConsumeHandler<B extends TSchema, H extends TSchema> = (
+  ctx: CtxConsumer<Static<B>, Static<H>>
 ) => Promise<BaseResponse> | BaseResponse
 
 type ParsedMessage = {
@@ -278,11 +282,11 @@ export class ServerKafka {
 
       const kafkaContext: KafkaContext<typeof schemaCtx> = {
         ...rawMessage,
-        commonLog: (scenario: string, identity?: string) => {
+        commonLog: (scenario: string, validate: boolean = true) => {
           const sessionId = processLog?.headers?.session || scenario
           session = sessionId + '-' + session
           const initInvoke = generateInternalTid(scenario, '-', 20)
-          const detailLog = new DetailLog(session, initInvoke, scenario, identity)
+          const detailLog = new DetailLog(session, initInvoke, scenario)
           const summaryLog = new SummaryLog(session, initInvoke, scenario)
 
           detailLog.addInputRequest(NODE_NAME.KAFKA_PRODUCER, scenario, initInvoke, {
@@ -298,34 +302,36 @@ export class ServerKafka {
           if (this.schemaHandler.has(topic)) {
             const schema = this.schemaHandler.get(topic)
 
-            if (schema?.body) {
-              const parsedBody = JSON.parse(message.value?.toString() || '')
-              const typeCheck = TypeCompiler.Compile(schema.body as TSchema)
-              if (!typeCheck.Check(parsedBody)) {
-                const first = typeCheck.Errors(parsedBody)
-                detailLog.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, topic, initInvoke, '', first)
-                summaryLog.addErrorBlock(NODE_NAME.KAFKA_CONSUMER, topic, 'null', 'Invalid_schema')
+            if (validate) {
+              if (schema?.body) {
+                const parsedBody = JSON.parse(message.value?.toString() || '')
+                const typeCheck = TypeCompiler.Compile(schema.body as TSchema)
+                if (!typeCheck.Check(parsedBody)) {
+                  const first = typeCheck.Errors(parsedBody)
+                  detailLog.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, topic, initInvoke, '', first)
+                  summaryLog.addErrorBlock(NODE_NAME.KAFKA_CONSUMER, topic, 'null', 'Invalid_schema')
 
-                throw new ServerKafkaError({
-                  message: 'Invalid schema',
-                  topic: topic,
-                  payload: first,
-                })
+                  throw new ServerKafkaError({
+                    message: 'Invalid schema',
+                    topic: topic,
+                    payload: first,
+                  })
+                }
               }
-            }
 
-            if (schema?.headers) {
-              const parsedQuery = rawMessage.headers
-              const typeCheck = TypeCompiler.Compile(schema.headers as TSchema)
-              if (!typeCheck.Check(parsedQuery)) {
-                const first = typeCheck.Errors(parsedQuery)
-                detailLog.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, topic, initInvoke, '', first)
-                summaryLog.addErrorBlock(NODE_NAME.KAFKA_CONSUMER, topic, 'null', 'Invalid_schema')
-                throw new ServerKafkaError({
-                  message: 'Invalid schema',
-                  topic: topic,
-                  payload: first,
-                })
+              if (schema?.headers) {
+                const parsedQuery = rawMessage.headers
+                const typeCheck = TypeCompiler.Compile(schema.headers as TSchema)
+                if (!typeCheck.Check(parsedQuery)) {
+                  const first = typeCheck.Errors(parsedQuery)
+                  detailLog.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, topic, initInvoke, '', first)
+                  summaryLog.addErrorBlock(NODE_NAME.KAFKA_CONSUMER, topic, 'null', 'Invalid_schema')
+                  throw new ServerKafkaError({
+                    message: 'Invalid schema',
+                    topic: topic,
+                    payload: first,
+                  })
+                }
               }
             }
           }
@@ -494,7 +500,7 @@ export class ServerKafka {
 
   public consume<BodySchema extends TSchema, HeaderSchema extends TSchema>(
     pattern: string,
-    handler: (ctx: CtxConsumer<Static<BodySchema>, Static<HeaderSchema>>) => Promise<any>,
+    handler: ConsumeHandler<BodySchema, HeaderSchema>,
     schema?: TSchemaCtx<BodySchema, HeaderSchema>
   ): void {
     this.messageHandlers.set(pattern, handler)
@@ -510,7 +516,7 @@ export type CtxConsumer<Body = unknown, Headers = unknown> = {
   setHeaders: (headers: Record<string, string>) => void
   commonLog: (
     scenario: string,
-    identity?: string
+    validate?: boolean
   ) => {
     detailLog: DetailLog
     summaryLog: SummaryLog

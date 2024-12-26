@@ -1,5 +1,5 @@
 import { Context, AppRoutes, ErrorValidator, IServer, SchemaCtx, HandlerConsumer, SchemaRoutes } from './route.js'
-import { Type as t, TSchema } from '@sinclair/typebox'
+import { Static, Type as t, TSchema } from '@sinclair/typebox'
 
 import express, { Response, Request, NextFunction, Express } from 'express'
 import Fastify, {
@@ -14,7 +14,7 @@ import NODE_NAME from '../constants/nodeName.js'
 import useragent from 'useragent'
 import { v4 as uuid } from 'uuid'
 import { loadLogConfig } from '../logger/logger.js'
-import { MessageHandler, ServerKafka } from '../kafka/kafka_server.js'
+import { ConsumeHandler, ServerKafka, TSchemaCtx } from '../kafka/kafka_server.js'
 import generateInternalTid from './generateInternalTid.js'
 import { IConfig } from './config.js'
 
@@ -167,12 +167,12 @@ class ExpressServer extends AppRoutes implements IServer {
     }
   }
 
-  public async consume<Schema extends Omit<SchemaCtx, 'query'>>(
+  public async consume<B extends TSchema, H extends TSchema>(
     topic: string,
-    handler: MessageHandler<Schema>,
-    schema?: Schema
+    handler: ConsumeHandler<B, H>,
+    schema?: TSchemaCtx<B, H>
   ) {
-    this.serverKafka.consume(topic, handler, schema)
+    return this.serverKafka.consume(topic, handler, schema)
   }
 }
 
@@ -265,13 +265,11 @@ class FastifyServer extends AppRoutes implements IServer {
     return this
   }
 
-  public async consume<Schema extends Omit<SchemaCtx, 'query'>>(
+  public consume = async <B extends TSchema, H extends TSchema>(
     topic: string,
-    handler: MessageHandler<Schema>,
-    schema?: Schema
-  ) {
-    this.serverKafka.consume(topic, handler, schema)
-  }
+    handler: ConsumeHandler<B, H>,
+    schema?: TSchemaCtx<B, H>
+  ): Promise<void> => this.serverKafka.consume(topic, handler, schema)
 
   public start(cb?: Function): void {
     this._RoutesMetadata.forEach(({ path, method, handler, schema }) => {
