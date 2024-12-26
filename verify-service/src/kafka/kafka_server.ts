@@ -38,6 +38,7 @@ export type KafkaContext<Schema extends SchemaCtx> = {
   partition: number
   headers: KafkaMessage['headers']
   value: string
+  validate: <T>(data: T) => void
   commonLog: (
     scenario: string,
     validate?: boolean
@@ -282,7 +283,36 @@ export class ServerKafka {
 
       const kafkaContext: KafkaContext<typeof schemaCtx> = {
         ...rawMessage,
-        commonLog: (scenario: string, validate: boolean = true) => {
+        validate: <T>(data: T) => {
+          if (this.schemaHandler.has(topic)) {
+            const schema = this.schemaHandler.get(topic)
+
+            if (schema?.body) {
+              const typeCheck = TypeCompiler.Compile(schema.body as TSchema)
+              if (!typeCheck.Check(data)) {
+                const first = typeCheck.Errors(data).First()
+                throw new ServerKafkaError({
+                  message: 'Invalid schema',
+                  topic: topic,
+                  payload: first,
+                })
+              }
+            }
+
+            if (schema?.headers) {
+              const typeCheck = TypeCompiler.Compile(schema.headers as TSchema)
+              if (!typeCheck.Check(rawMessage.headers)) {
+                const first = typeCheck.Errors(rawMessage.headers).First()
+                throw new ServerKafkaError({
+                  message: 'Invalid schema',
+                  topic: topic,
+                  payload: first,
+                })
+              }
+            }
+          }
+        },
+        commonLog: (scenario: string, validate: boolean = false) => {
           const sessionId = processLog?.headers?.session || scenario
           session = sessionId + '-' + session
           const initInvoke = generateInternalTid(scenario, '-', 20)
@@ -307,8 +337,8 @@ export class ServerKafka {
                 const parsedBody = JSON.parse(message.value?.toString() || '')
                 const typeCheck = TypeCompiler.Compile(schema.body as TSchema)
                 if (!typeCheck.Check(parsedBody)) {
-                  const first = typeCheck.Errors(parsedBody)
-                  detailLog.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, topic, initInvoke, '', first)
+                  const first = typeCheck.Errors(parsedBody).First()
+                  detailLog.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, topic, initInvoke, '', first || '')
                   summaryLog.addErrorBlock(NODE_NAME.KAFKA_CONSUMER, topic, 'null', 'Invalid_schema')
 
                   throw new ServerKafkaError({
@@ -323,9 +353,9 @@ export class ServerKafka {
                 const parsedQuery = rawMessage.headers
                 const typeCheck = TypeCompiler.Compile(schema.headers as TSchema)
                 if (!typeCheck.Check(parsedQuery)) {
-                  const first = typeCheck.Errors(parsedQuery)
-                  detailLog.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, topic, initInvoke, '', first)
-                  summaryLog.addErrorBlock(NODE_NAME.KAFKA_CONSUMER, topic, 'null', 'Invalid_schema')
+                  const first = typeCheck.Errors(parsedQuery).First()
+                  // detailLog.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, topic, initInvoke, '', first || '')
+                  // summaryLog.addErrorBlock(NODE_NAME.KAFKA_CONSUMER, topic, 'null', 'Invalid_schema')
                   throw new ServerKafkaError({
                     message: 'Invalid schema',
                     topic: topic,
@@ -363,7 +393,18 @@ export class ServerKafka {
         ctx.summaryLog.end('', 'success')
       }
     } catch (error) {
-      if (error instanceof Error) {
+      if (error instanceof ServerKafkaError) {
+        if (error.topic) {
+          if (ctx.summaryLog) {
+            ctx.summaryLog?.addErrorBlock(NODE_NAME.KAFKA_CONSUMER, ctx.scenario, 'null', error.message)
+          }
+
+          if (ctx.detailLog) {
+            ctx.detailLog?.addOutputRequest(NODE_NAME.KAFKA_CONSUMER, ctx.scenario, ctx.initInvoke, '', error.payload)
+            ctx.detailLog?.end()
+          }
+        }
+      } else if (error instanceof Error) {
         if (ctx.summaryLog) {
           ctx.summaryLog?.addField('errorCause', error.message)
         }
@@ -522,6 +563,7 @@ export type CtxConsumer<Body = unknown, Headers = unknown> = {
     summaryLog: SummaryLog
     initInvoke: string
   }
+  validate: <T>(data: T) => void
   response: (code: number, data: any) => void
   redirect: (url: string, code?: number) => void
 }

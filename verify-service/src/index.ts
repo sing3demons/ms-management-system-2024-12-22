@@ -2,7 +2,7 @@ import NODE_NAME from './constants/nodeName.js'
 import TOPICS from './constants/topics.js'
 import { CtxConsumer, ServerKafka } from './kafka/kafka_server.js'
 import { loadLogConfig } from './logger/logger.js'
-import { Static, TSchema, Type } from '@sinclair/typebox'
+import { Type } from '@sinclair/typebox'
 import TokenModel from './mongo/models/token.model.js'
 import crypto from 'crypto'
 import { DetailLog, SummaryLog } from './logger/index.js'
@@ -66,7 +66,7 @@ type User = {
   display_name?: string
   profile_image?: string
 }
-async function verifyHandler({ commonLog, body }: CtxConsumer<VerifySchemaType>) {
+async function verifyHandler({ commonLog, body, validate }: CtxConsumer<VerifySchemaType>) {
   const { detailLog, summaryLog } = commonLog(TOPICS.SERVICE_REGISTER)
 
   summaryLog.addSuccessBlock(NODE_NAME.KAFKA_CONSUMER, TOPICS.SERVICE_REGISTER, 'null', 'success')
@@ -132,9 +132,9 @@ async function verifyHandler({ commonLog, body }: CtxConsumer<VerifySchemaType>)
 
 app.consume(TOPICS.SERVICE_VERIFY, async (c) => verifyHandler(c), {
   body: verifySchema,
-  beforeHandle: async (ctx) => {
-    console.log('beforeHandle', ctx.body)
-  },
+  // beforeHandle: async (ctx) => {
+  //   console.log('beforeHandle', ctx.body)
+  // },
 })
 
 app.consume(
