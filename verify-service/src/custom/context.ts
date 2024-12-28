@@ -1,6 +1,7 @@
+import { Static, TObject } from '@sinclair/typebox'
 import type { TypeCheck, ValueError } from '@sinclair/typebox/compiler'
 
-export interface RouteSchema {
+export interface CtxSchema {
   body?: unknown
   headers?: unknown
   query?: unknown
@@ -322,17 +323,33 @@ export type Cookie = Prettify<
 
 export type Redirect = (url: string, status?: number) => void
 
-export type Context<Route extends RouteSchema = {}, Path extends string | undefined = undefined> = Prettify<{
-  body: Route['body']
-  query: undefined extends Route['query'] ? Record<string, string | undefined> : Route['query']
+export type Context<Route extends CtxSchema = {}, Path extends string | undefined = undefined> = Prettify<{
+  body: undefined extends Route['body']
+    ? Record<string, unknown>
+    : Route['body'] extends TObject
+    ? Static<Route['body']>
+    : never
+
+  query: undefined extends Route['query']
+    ? Record<string, string | undefined>
+    : Route['query'] extends TObject
+    ? Static<Route['query']>
+    : never
+
   params: undefined extends Route['params']
     ? undefined extends Path
       ? Record<string, string>
       : Path extends `${string}/${':' | '*'}${string}`
       ? ResolvePath<Path>
       : never
-    : Route['params']
-  headers: undefined extends Route['headers'] ? Record<string, string | undefined> : Route['headers']
+    : Route['params'] extends TObject
+    ? Static<Route['params']>
+    : never
+  headers: undefined extends Route['headers']
+    ? Record<string, string | undefined>
+    : Route['headers'] extends TObject
+    ? Static<Route['headers']>
+    : never
   // cookie: undefined extends Route['cookie']
   //   ? Record<string, Cookie<string | undefined>>
   //   : Record<string, Cookie<string | undefined>> &
@@ -358,65 +375,35 @@ export type Context<Route extends RouteSchema = {}, Path extends string | undefi
   response?: undefined extends Route['response'] ? unknown : Route['response'][keyof Route['response']]
 }>
 
-export type RouteHandler<Route extends RouteSchema = {}, Path extends string | undefined = undefined> = (
+export type RouteHandler<Route extends CtxSchema = {}, Path extends string | undefined = undefined> = (
   context: Context<Route, Path>
 ) => Promise<unknown>
 
-function get<const Path extends string, Route extends RouteSchema>(
-  path: Path,
-  handler: RouteHandler<Route, Path>,
-  hook?: {
-    before?: HigherOrderFunction
-    after?: HigherOrderFunction
-    schema: Route
-  }
-) {}
+export const enum HttpMethod {
+  GET = 'get',
+  POST = 'post',
+  PUT = 'put',
+  PATCH = 'patch',
+  DELETE = 'delete',
+}
 
-get(
-  '/user/:id',
-  async (ctx) => {
-    ctx.params
-    ctx.body
-    ctx.set.headers = {
-      'accept-encoding': 'gzip',
-    }
+export type InlineHandler<Route extends CtxSchema = {}, Path extends string | undefined = undefined> =
+  | RouteHandler<Route, Path>
+  | RouteHandler<Route, Path>[]
 
-    ctx.response
-  },
-  {
-    schema: {
-      body: {
-        id: 'string',
-      },
-    },
-    before: (fn, req) => {
-      return fn(req)
-    },
-  }
-)
-
-export enum HTTPMethod {
-  GET = 'GET',
-  POST = 'POST',
-  PUT = 'PUT',
-  DELETE = 'DELETE',
-  PATCH = 'PATCH',
-  OPTIONS = 'OPTIONS',
-  HEAD = 'HEAD',
-  CONNECT = 'CONNECT',
-  TRACE = 'TRACE',
+export type MiddlewareRoute<Route extends CtxSchema> = {
+  before?: HigherOrderFunction
+  after?: HigherOrderFunction
+  schema?: Route
 }
 
 export type InternalRoute = {
-  method: HTTPMethod
+  method: HttpMethod
   path: string
   handler: RouteHandler<any, any> | RouteHandler<any, any>[] | any
-  hook?: {
-    before?: HigherOrderFunction
-    after?: HigherOrderFunction
-    schema: RouteSchema
-  }
+  hook?: MiddlewareRoute<any>
 }
+
 export type SchemaValidator = {
   createBody?(): TypeCheck<any>
   createHeaders?(): TypeCheck<any>
