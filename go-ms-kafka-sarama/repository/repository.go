@@ -18,6 +18,7 @@ import (
 const (
 	ErrUserNotFound = "user not found"
 	ErrIdInvalid    = "invalid ID"
+	node            = "mongo"
 )
 
 type CollectionInterface interface {
@@ -26,6 +27,7 @@ type CollectionInterface interface {
 	InsertOne(ctx context.Context, document interface{}, opts ...options.Lister[options.InsertOneOptions]) (*mongo.InsertOneResult, error)
 	Find(ctx context.Context, filter interface{}, opts ...options.Lister[options.FindOptions]) (*mongo.Cursor, error)
 	UpdateOne(ctx context.Context, filter interface{}, update interface{}, opts ...options.Lister[options.UpdateOneOptions]) (*mongo.UpdateResult, error)
+	DeleteOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.DeleteOneOptions]) (*mongo.DeleteResult, error)
 }
 
 type Repository[T any] struct {
@@ -81,7 +83,6 @@ type Document[T any] struct {
 }
 
 func (r *Repository[T]) Create(ctx context.Context, doc *T, detailLog logger.DetailLog, summaryLog logger.SummaryLog) (*T, error) {
-	node := "mongo"
 	cmd := "insertOne"
 	invoke := generateInvoke()
 	collectionName := r.collection.Name()
@@ -138,7 +139,6 @@ func (r *Repository[T]) Create(ctx context.Context, doc *T, detailLog logger.Det
 }
 
 func (r *Repository[T]) Find(ctx context.Context, doc Document[T], detailLog logger.DetailLog, summaryLog logger.SummaryLog) ([]*T, error) {
-	node := "mongo"
 	cmd := "findAll"
 	collectionName := r.collection.Name()
 	method := "find"
@@ -215,7 +215,6 @@ func (r *Repository[T]) Find(ctx context.Context, doc Document[T], detailLog log
 }
 
 func (r *Repository[T]) FindOne(ctx context.Context, filter any, detailLog logger.DetailLog, summaryLog logger.SummaryLog) (*T, error) {
-	node := "mongo"
 	cmd := "findOne"
 	collectionName := r.collection.Name()
 	method := "findOne"
@@ -263,7 +262,6 @@ func (r *Repository[T]) FindOne(ctx context.Context, filter any, detailLog logge
 }
 
 func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLog logger.DetailLog, summaryLog logger.SummaryLog) error {
-	node := "mongo"
 	cmd := "updateOne"
 	collectionName := r.collection.Name()
 	method := "updateOne"
@@ -364,4 +362,55 @@ func isEmpty(value interface{}) bool {
 		// Use reflection for other types
 		return reflect.DeepEqual(value, reflect.Zero(reflect.TypeOf(value)).Interface())
 	}
+}
+
+func (r *Repository[T]) DeleteOne(ctx context.Context, filter any, detailLog logger.DetailLog, summaryLog logger.SummaryLog) error {
+	cmd := "deleteOne"
+	collectionName := r.collection.Name()
+	method := "updateOne"
+	invoke := getInvoke()
+
+	model := getModel(collectionName, method)
+
+	update := bson.M{
+		"$set": bson.M{
+			"delete_at": time.Now(),
+		},
+	}
+
+	rawDataFilter, _ := json.Marshal(filter)
+	rawDataNew, _ := json.Marshal(update)
+	rawData := fmt.Sprintf("%s(%s, %s", model, strings.ReplaceAll(string(rawDataFilter), "\"", "'"), strings.ReplaceAll(string(rawDataNew), "\"", "'"))
+	rawData += ")"
+
+	processReqLog := ProcessOutputLog{
+		Body: MongoBody{
+			Collection: collectionName,
+			Method:     method,
+			Query:      filter,
+			Document:   nil,
+			Options:    nil,
+			SortItems:  nil,
+			Projection: nil,
+		},
+		RawData: rawData,
+	}
+
+	detailLog.AddOutputRequest(node, cmd, invoke, processReqLog.RawData, processReqLog.Body)
+	detailLog.End()
+
+	deleteResult, err := r.collection.UpdateOne(ctx, filter, update, nil)
+	if err != nil {
+		summaryLog.AddError(node, cmd, invoke, err.Error())
+		detailLog.AddInputRequest(node, cmd, invoke, "", map[string]any{
+			"Return": err.Error(),
+		})
+		return fmt.Errorf("failed to delete document: %w", err)
+	}
+
+	summaryLog.AddSuccess(node, cmd, "200", "success")
+	detailLog.AddInputRequest(node, cmd, invoke, "", map[string]any{
+		"Return": deleteResult,
+	})
+	return nil
 }

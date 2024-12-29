@@ -2,11 +2,14 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/sing3demons/logger-kp/logger"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -38,6 +41,11 @@ func (m *MockCollection) Find(ctx context.Context, filter interface{}, opts ...o
 func (m *MockCollection) UpdateOne(ctx context.Context, filter interface{}, update interface{}, opts ...options.Lister[options.UpdateOneOptions]) (*mongo.UpdateResult, error) {
 	args := m.Called(ctx, filter, update, opts)
 	return args.Get(0).(*mongo.UpdateResult), args.Error(1)
+}
+
+func (m *MockCollection) DeleteOne(ctx context.Context, filter interface{}, opts ...options.Lister[options.DeleteOneOptions]) (*mongo.DeleteResult, error) {
+	args := m.Called(ctx, filter, opts)
+	return args.Get(0).(*mongo.DeleteResult), args.Error(1)
 }
 
 func (m *MockCollection) Name() string {
@@ -92,6 +100,10 @@ func TestGenerateInvoke(t *testing.T) {
 	}
 }
 
+func mapErrMsg(str, v string) string {
+	return fmt.Sprintf("%s: %s", str, v)
+}
+
 func TestFindOneSuccess(t *testing.T) {
 	ctx := context.TODO()
 	filter := bson.M{"_id": "12345"}
@@ -116,10 +128,10 @@ func TestFindOneSuccess(t *testing.T) {
 	// Call the method under test
 	result, err := repo.FindOne(ctx, filter, logger.NewDetailLog("mock", "mock", "mock"), logger.NewSummaryLog("mock", "mock", "mock"))
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Error(mapErrMsg("unexpected error", err.Error()))
 	}
 
-	_ = result
+	assert.NotNil(t, result)
 
 	// Assert the result is as expected
 	// if result != mockResult {
@@ -173,7 +185,7 @@ func TestInsertOneSuccess(t *testing.T) {
 	// Call the method under test
 	result, err := repo.Create(ctx, document, logger.NewDetailLog("mock", "mock", "mock"), logger.NewSummaryLog("mock", "mock", "mock"))
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Error(mapErrMsg("unexpected error", err.Error()))
 	}
 
 	_ = result
@@ -185,4 +197,89 @@ func TestInsertOneSuccess(t *testing.T) {
 
 	// Verify all expectations
 	mockCollection.AssertExpectations(t)
+}
+
+func TestDeleteOneSuccess(t *testing.T) {
+	ctx := context.TODO()
+	filter := bson.M{"_id": "12345"}
+
+	// Create a mock collection
+	mockCollection := new(MockCollection)
+
+	// Mock the UpdateOne method to simulate the response
+	mockResult := &mongo.UpdateResult{
+		MatchedCount:  1,
+		ModifiedCount: 1,
+	}
+
+	// Set up the mock behavior
+	mockCollection.On("UpdateOne", ctx, filter, mock.Anything, mock.Anything).Return(mockResult, nil)
+
+	// Inject the mock collection into the repository
+	repo := &Repository[TestDocument]{
+		collection: mockCollection,
+	}
+
+	// Call the method under test
+	err := repo.DeleteOne(ctx, filter, logger.NewDetailLog("mock", "mock", "mock"), logger.NewSummaryLog("mock", "mock", "mock"))
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Verify all expectations
+	mockCollection.AssertExpectations(t)
+}
+
+func TestRemoveEmptyFields(t *testing.T) {
+	type TestStruct struct {
+		Field1 string                 `json:"field1,omitempty"`
+		Field2 int                    `json:"field2,omitempty"`
+		Field3 []string               `json:"field3,omitempty"`
+		Field4 map[string]interface{} `json:"field4,omitempty"`
+		Field5 *string                `json:"field5,omitempty"`
+	}
+
+	tests := []struct {
+		name     string
+		input    TestStruct
+		expected map[string]interface{}
+	}{
+		{
+			name: "All fields empty",
+			input: TestStruct{
+				Field1: "",
+				Field2: 0,
+				Field3: nil,
+				Field4: nil,
+				Field5: nil,
+			},
+			expected: map[string]interface{}{},
+		},
+		{
+			name: "Some fields empty",
+			input: TestStruct{
+				Field1: "value1",
+				Field2: 0,
+				Field3: nil,
+				Field4: map[string]interface{}{"key": "value"},
+				Field5: nil,
+			},
+			expected: map[string]interface{}{
+				"field1": "value1",
+				"field4": map[string]interface{}{"key": "value"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := RemoveEmptyFields(tt.input)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("expected: %v, got: %v", tt.expected, result)
+			}
+		})
+	}
 }
