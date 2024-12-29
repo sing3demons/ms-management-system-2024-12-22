@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type EMethod string
@@ -57,27 +57,27 @@ type InputLog struct {
 
 var db *mongo.Database
 
-func InitMongo(uri, dbName string) error {
+func InitMongo(uri, dbName string) *mongo.Database {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
-		return fmt.Errorf("failed to connect to MongoDB: %w", err)
+		panic(err)
 	}
 
 	if err := client.Ping(ctx, nil); err != nil {
-		return fmt.Errorf("failed to ping MongoDB: %w", err)
+		panic(err)
 	}
 	db = client.Database(dbName)
 	fmt.Println("Database connected")
-	return nil
+	return db
 }
 
 type OptionMongo struct {
 	*options.InsertOneOptions
-	*options.UpdateOptions
-	*options.DeleteOptions
+	*options.UpdateOneOptions
+	*options.DeleteOneOptions
 	*options.FindOneOptions
 	*options.FindOptions
 	*options.FindOneAndUpdateOptions
@@ -165,7 +165,7 @@ func Mongo(collectionName string, method EMethod, document TDocument) ResultMong
 			break
 		}
 
-		operationResult, err := collection.UpdateOne(ctx, document.Filter, document.New, document.Options.UpdateOptions)
+		operationResult, err := collection.UpdateOne(ctx, document.Filter, document.New)
 		if err != nil {
 			result.Err = true
 			result.ResultDesc = fmt.Sprintf("failed to update one: %v", err)
@@ -182,7 +182,7 @@ func Mongo(collectionName string, method EMethod, document TDocument) ResultMong
 			break
 		}
 
-		operationResult, err := collection.UpdateMany(ctx, document.Filter, document.New, document.Options.UpdateOptions)
+		operationResult, err := collection.UpdateMany(ctx, document.Filter, document.New)
 		if err != nil {
 			result.Err = true
 			result.ResultDesc = fmt.Sprintf("failed to update many: %v", err)
@@ -199,7 +199,7 @@ func Mongo(collectionName string, method EMethod, document TDocument) ResultMong
 			break
 		}
 
-		operationResult, err := collection.DeleteOne(ctx, document.Filter, document.Options.DeleteOptions)
+		operationResult, err := collection.DeleteOne(ctx, document.Filter)
 		if err != nil {
 			result.Err = true
 			result.ResultDesc = fmt.Sprintf("failed to delete one: %v", err)
@@ -219,7 +219,7 @@ func Mongo(collectionName string, method EMethod, document TDocument) ResultMong
 			return result
 		}
 
-		operationResult := collection.FindOne(ctx, document.Filter, document.Options.FindOneOptions)
+		operationResult := collection.FindOne(ctx, document.Filter)
 		if err := operationResult.Err(); err != nil {
 			result.Err = true
 			result.ResultDesc = fmt.Sprintf("failed to find one: %v", err)
@@ -231,7 +231,7 @@ func Mongo(collectionName string, method EMethod, document TDocument) ResultMong
 		result.ResultData = operationResult
 	case Find:
 
-		operationResult, err := collection.Find(ctx, document.Filter, document.Options.FindOptions)
+		operationResult, err := collection.Find(ctx, document.Filter)
 		if err != nil {
 			result.Err = true
 			result.ResultDesc = fmt.Sprintf("failed to find: %v", err)
@@ -252,7 +252,7 @@ func Mongo(collectionName string, method EMethod, document TDocument) ResultMong
 			break
 		}
 
-		operationResult := collection.FindOneAndUpdate(ctx, document.Filter, document.New, document.Options.FindOneAndUpdateOptions)
+		operationResult := collection.FindOneAndUpdate(ctx, document.Filter, document.New)
 		if err := operationResult.Err(); err != nil {
 			result.Err = true
 			result.ResultDesc = fmt.Sprintf("failed to find one and update: %v", err)
