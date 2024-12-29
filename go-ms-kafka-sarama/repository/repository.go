@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sing3demons/logger-kp/logger"
@@ -64,7 +65,11 @@ func getModel(name, method string) string {
 }
 
 func getInvoke() string {
-	return MongoPrefix + uuid.New().String()
+	id, err := uuid.NewUUID()
+	if err != nil {
+		return uuid.NewString()
+	}
+	return MongoPrefix + id.String()
 }
 
 type Document[T any] struct {
@@ -268,8 +273,15 @@ func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLo
 
 	rawDataFilter, _ := json.Marshal(doc.Filter)
 
+	// delete empty fields in the document
+	newDoc, err := RemoveEmptyFields(doc.New)
+	if err != nil {
+		return fmt.Errorf("failed to update document: %w", err)
+	}
+	newDoc["update_at"] = time.Now()
+
 	update := bson.M{
-		"$set": doc.New,
+		"$set": newDoc,
 	}
 	rawDataNew, _ := json.Marshal(update)
 	rawData := fmt.Sprintf("%s(%s, %s", model, strings.ReplaceAll(string(rawDataFilter), "\"", "'"), strings.ReplaceAll(string(rawDataNew), "\"", "'"))
@@ -302,10 +314,12 @@ func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLo
 		}
 	}
 
-	updateResult, err := r.collection.UpdateOne(ctx, doc.Filter, doc.New, opts)
+	updateResult, err := r.collection.UpdateOne(ctx, doc.Filter, update, opts)
 	if err != nil {
 		summaryLog.AddError(node, cmd, invoke, err.Error())
-		detailLog.AddInputRequest(node, cmd, invoke, "", err)
+		detailLog.AddInputRequest(node, cmd, invoke, "", map[string]interface{}{
+			"Return": err.Error(),
+		})
 		return fmt.Errorf("failed to update document: %w", err)
 	}
 
@@ -314,4 +328,40 @@ func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLo
 		"Return": updateResult,
 	})
 	return nil
+}
+
+func RemoveEmptyFields[T any](input T) (map[string]interface{}, error) {
+	data, err := json.Marshal(input) // Convert to JSON (respects omitempty)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
+	for key, value := range result {
+		if isEmpty(value) {
+			delete(result, key)
+		}
+	}
+
+	return result, nil
+}
+
+func isEmpty(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+	switch v := value.(type) {
+	case string:
+		return v == ""
+	case []interface{}:
+		return len(v) == 0
+	case map[string]interface{}:
+		return len(v) == 0
+	default:
+		// Use reflection for other types
+		return reflect.DeepEqual(value, reflect.Zero(reflect.TypeOf(value)).Interface())
+	}
 }

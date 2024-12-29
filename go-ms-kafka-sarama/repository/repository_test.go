@@ -59,7 +59,6 @@ func TestGetInvoke(t *testing.T) {
 	}
 
 	// Check if the remaining part is a valid UUID
-	// This is done by checking if the string after "mongo:" is a valid UUID
 	_, err := uuid.Parse(invoke[len(MongoPrefix):])
 	if err != nil {
 		t.Errorf("expected a valid UUID after 'mongo:', got %s", invoke[len(MongoPrefix):])

@@ -30,6 +30,7 @@ type IApplication interface {
 
 	// Consumer Services
 	Consume(topic string, h ServiceHandleFunc) error
+	NewProducer() sarama.SyncProducer
 }
 
 // Microservice is the centralized service management
@@ -358,7 +359,10 @@ func (ctx *ConsumerContext) SendMessage(topic string, message interface{}, opts 
 	timestamp := time.Now()
 	producer := ctx.ms.getProducer()
 	if producer == nil {
-		return fmt.Errorf("Error creating producer")
+		producer = ctx.ms.NewProducer()
+		if producer == nil {
+			return fmt.Errorf("error creating producer")
+		}
 	}
 
 	data, err := json.Marshal(message)

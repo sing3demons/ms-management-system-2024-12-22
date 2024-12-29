@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sing3demons/logger-kp/logger"
 	"github.com/sing3demons/saram-kafka/mongo"
 	"github.com/sing3demons/saram-kafka/repository"
@@ -57,7 +58,7 @@ func main() {
 		now := time.Now()
 
 		doc := Example{
-			// ID:       uuid.New().String(),
+			ID:       uuid.New().String(),
 			Name:     "test",
 			CreateAt: &now,
 			UpdateAt: &now,
@@ -70,7 +71,22 @@ func main() {
 			"_id": doc.ID,
 		}, detailLog, summaryLog)
 
-		opts := repository.Document[Example]{
+		upDateNow := time.Now()
+
+		repo.UpdateOne(c, repository.Document[Example]{
+			Filter: map[string]any{
+				"_id": doc.ID,
+			},
+			New: Example{
+				Name:     "test update2",
+				UpdateAt: &upDateNow,
+			},
+			Options: map[string]any{
+				"upsert": true,
+			},
+		}, detailLog, summaryLog)
+
+		repo.Find(c, repository.Document[Example]{
 			Filter: map[string]any{
 				"delete_at": nil,
 			},
@@ -81,21 +97,7 @@ func main() {
 				"_id":  1,
 				"name": 1,
 			},
-		}
-		repo.Find(c, opts, detailLog, summaryLog)
-
-		// update := repository.Document[Example]{
-		// 	Filter: map[string]any{
-		// 		"_id": doc.ID,
-		// 	},
-		// 	New: Example{
-		// 		Name: "test update",
-		// 	},
-		// 	Options: map[string]any{
-		// 		"upsert": true,
-		// 	},
-		// }
-		// repo.UpdateOne(c, update, detailLog, summaryLog)
+		}, detailLog, summaryLog)
 
 		err := ctx.SendMessage("service.verify", map[string]any{
 			"email": "test@dev.com",

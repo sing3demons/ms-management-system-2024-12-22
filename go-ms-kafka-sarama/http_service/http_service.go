@@ -108,10 +108,21 @@ func (svc *httpService) requestHttp() (any, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
+		config := RetryConfig{
+			MaxAttempts:  3,
+			InitialDelay: 100 * time.Millisecond,
+			MaxDelay:     1 * time.Second,
+		}
+
 		wg.Add(1)
 		go func(attr RequestAttributes) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
+
+			transport := NewRetryRoundTripper(
+				http.DefaultTransport,
+				config,
+			)
 
 			req, err := createRequest(ctx, attr, svc.detailLog, svc.summaryLog)
 			if err != nil {
@@ -127,7 +138,8 @@ func (svc *httpService) requestHttp() (any, error) {
 			}
 
 			client := &http.Client{
-				Timeout: time.Duration(attr.Timeout) * time.Second,
+				Timeout:   time.Duration(attr.Timeout) * time.Second,
+				Transport: transport,
 			}
 			response := executeRequest(client, req, attr)
 

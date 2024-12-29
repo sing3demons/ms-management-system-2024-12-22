@@ -31,6 +31,13 @@ services:
         - 27017:27017
       networks:
       - ms-service
+  mailhog:
+    image: mailhog/mailhog
+    networks:
+      - ms-service
+    ports:
+      - 1025:1025
+      - 8025:8025
   zookeeper:
     image: confluentinc/cp-zookeeper:7.8.0
     environment:
@@ -58,13 +65,6 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-  mailhog:
-    image: mailhog/mailhog
-    networks:
-      - ms-service
-    ports:
-      - 1025:1025
-      - 8025:8025
   # filebeat:
   #   image: docker.elastic.co/beats/filebeat:8.10.1
   #   container_name: filebeat
