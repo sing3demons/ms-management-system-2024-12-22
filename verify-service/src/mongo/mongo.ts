@@ -79,6 +79,7 @@ async function mongo<T>(model: Model<T>, method: EMethod, document: TDocument<T>
     RawData: '',
   }
 
+
   try {
     switch (method) {
       case 'create':
