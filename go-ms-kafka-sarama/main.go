@@ -31,6 +31,9 @@ func init() {
 
 const (
 	ServiceRegisterTopic = "service.register"
+	mongoUri             = "mongodb://localhost:27017/verify-service"
+	servers              = "localhost:29092"
+	groupID              = "example-group"
 )
 
 type Example struct {
@@ -42,10 +45,8 @@ type Example struct {
 }
 
 func main() {
-	servers := "localhost:29092"
-	groupID := "example-group"
 
-	db := mongo.InitMongo("mongodb://localhost:27017/verify-service", "example")
+	db := mongo.InitMongo(mongoUri, "example")
 	repo := repository.NewRepository[Example](db.Collection("example"))
 
 	ms := microservice.NewApplication(servers, groupID)
