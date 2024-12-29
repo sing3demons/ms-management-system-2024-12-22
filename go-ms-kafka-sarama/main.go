@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sing3demons/logger-kp/logger"
+	"github.com/sing3demons/saram-kafka/microservice"
 	"github.com/sing3demons/saram-kafka/mongo"
 	"github.com/sing3demons/saram-kafka/repository"
 )
@@ -47,9 +48,9 @@ func main() {
 	db := mongo.InitMongo("mongodb://localhost:27017/verify-service", "example")
 	repo := repository.NewRepository[Example](db.Collection("example"))
 
-	ms := NewApplication(servers, groupID)
+	ms := microservice.NewApplication(servers, groupID)
 	ms.Log("Starting microservice")
-	err := ms.Consume(ServiceRegisterTopic, func(ctx IContext) error {
+	err := ms.Consume(ServiceRegisterTopic, func(ctx microservice.IContext) error {
 		c := context.Background()
 		detailLog, summaryLog := ctx.CommonLog(ServiceRegisterTopic)
 

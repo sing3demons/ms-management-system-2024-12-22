@@ -1,261 +1,20 @@
-package main
+package microservice
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
 	"github.com/sing3demons/logger-kp/logger"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	gomail "gopkg.in/mail.v2"
 )
-
-// IMicroservice is interface for centralized service management
-type IApplication interface {
-	Start() error
-	Stop()
-	Cleanup() error
-	Log(message string, fields ...map[string]any)
-
-	// Consumer Services
-	Consume(topic string, h ServiceHandleFunc) error
-	NewProducer() sarama.SyncProducer
-}
-
-// Microservice is the centralized service management
-type Microservice struct {
-	exitChannel chan bool
-	brokers     []string
-	groupID     string
-	client      sarama.ConsumerGroup
-	Logger      *zap.Logger
-	producer    *sarama.SyncProducer
-}
-
-type application struct {
-	exitChannel chan bool
-	brokers     []string
-	groupID     string
-	client      sarama.ConsumerGroup
-	Logger      *zap.Logger
-	producer    *sarama.SyncProducer
-}
-
-// IContext is the context for service
-type IContext interface {
-	L() *zap.Logger
-	Log(message string, fields ...map[string]any)
-	Param(name string) string
-	Response(responseCode int, responseData interface{})
-	ReadInput() string
-	CommonLog(scenario string) (logger.DetailLog, logger.SummaryLog)
-	// SendMail(message Message) error
-	SendMessage(topic string, message interface{}, opts ...OptionProducerMessage) error
-}
-
-// ServiceHandleFunc is the handler for each Microservice
-type ServiceHandleFunc func(ctx IContext) error
-
-// NewMicroservice is the constructor function of Microservice
-func NewApplication(brokers, groupID string) IApplication {
-	return &application{
-		brokers: strings.Split(brokers, ","),
-		groupID: groupID,
-		Logger:  logger.NewLogger(),
-	}
-}
-
-func (ms *application) NewProducer() sarama.SyncProducer {
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	config.Producer.Return.Errors = true
-	config.Version = sarama.V2_5_0_0 // Set to Kafka version used
-	producer, err := sarama.NewSyncProducer(ms.brokers, config)
-	if err != nil {
-		ms.Log(fmt.Sprintf("Error creating producer: %v", err))
-		return nil
-	}
-
-	ms.producer = &producer
-	return producer
-}
-
-// getProducer returns the producer
-func (ms *application) getProducer() sarama.SyncProducer {
-	if ms.producer == nil {
-		return ms.NewProducer()
-	}
-	return *ms.producer
-}
-
-// Consume registers a consumer for the service
-func (ms *application) Consume(topic string, h ServiceHandleFunc) error {
-	if ms.client == nil {
-		config := sarama.NewConfig()
-		config.Consumer.Group.Rebalance.Strategy = sarama.NewBalanceStrategyRoundRobin()
-		config.Consumer.Offsets.Initial = sarama.OffsetOldest
-		config.Version = sarama.V2_5_0_0 // Set to Kafka version used
-		client, err := sarama.NewConsumerGroup(ms.brokers, ms.groupID, config)
-		if err != nil {
-			ms.Log(fmt.Sprintf("Error creating consumer group: %v", err))
-			return err
-		}
-
-		ms.client = client
-	}
-
-	ms.Log(fmt.Sprintf("Consumer started for topic: [%s]", topic))
-
-	defer ms.client.Close()
-
-	handler := &ConsumerGroupHandler{
-		ms:    ms,
-		h:     h,
-		topic: topic,
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		for {
-			if err := ms.client.Consume(ctx, []string{topic}, handler); err != nil {
-				ms.Log(fmt.Sprintf("Error during consume: %v", err))
-			}
-			if ctx.Err() != nil {
-				return
-			}
-		}
-	}()
-
-	// Handle graceful shutdown
-	consumptionIsPaused := false
-	sigusr1 := make(chan os.Signal, 1)
-	signal.Notify(sigusr1, syscall.SIGUSR1)
-
-	sigterm := make(chan os.Signal, 1)
-	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
-	select {
-	case <-sigterm:
-		fmt.Println("Received termination signal. Initiating shutdown...")
-		cancel()
-	case <-ctx.Done():
-		fmt.Println("terminating: context cancelled")
-	case <-sigusr1:
-		toggleConsumptionFlow(ms.client, &consumptionIsPaused)
-	}
-	// Wait for the consumer to finish processing
-	wg.Wait()
-	return nil
-}
-
-func toggleConsumptionFlow(client sarama.ConsumerGroup, isPaused *bool) {
-	if *isPaused {
-		client.ResumeAll()
-		fmt.Println("Resuming consumption")
-	} else {
-		client.PauseAll()
-		fmt.Println("Pausing consumption")
-	}
-
-	*isPaused = !*isPaused
-}
-
-// Start starts the microservice
-func (ms *application) Start() error {
-	osQuit := make(chan os.Signal, 1)
-	ms.exitChannel = make(chan bool, 1)
-	signal.Notify(osQuit, syscall.SIGTERM, syscall.SIGINT)
-	exit := false
-	for {
-
-		if exit {
-			break
-		}
-		select {
-		case <-osQuit:
-			exit = true
-		case <-ms.exitChannel:
-			exit = true
-		}
-	}
-	return nil
-}
-
-// Stop stops the microservice
-func (ms *application) Stop() {
-	if ms.exitChannel == nil {
-		return
-	}
-	ms.exitChannel <- true
-}
-
-// Cleanup performs cleanup before exit
-func (ms *application) Cleanup() error {
-	return nil
-}
-
-// Log logs a message to the console
-func (ms *application) Log(message string, fields ...map[string]any) {
-	var f []zapcore.Field
-	for _, v := range fields {
-		for key, value := range v {
-			f = append(f, zap.Any(key, value))
-		}
-	}
-	ms.Logger.Info(message, f...)
-}
-
-// ConsumerGroupHandler implements sarama.ConsumerGroupHandler
-type ConsumerGroupHandler struct {
-	ms    *application
-	h     ServiceHandleFunc
-	topic string
-}
-
-func (handler *ConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
-	return nil
-}
-func (handler *ConsumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
-	return nil
-}
-
-const (
-	Key      = "logger"
-	XSession = "X-Session-Id"
-)
-
-// ConsumeClaim processes messages from a claim
-func (handler *ConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	for msg := range claim.Messages() {
-		// set context
-		xTid := fmt.Sprintf("x-tid:%s:s%s", uuid.New().String(), strconv.Itoa(int(session.GenerationID())))
-		l := handler.ms.Logger.With(zap.String(XSession, xTid))
-		handler.ms.Logger = l
-
-		handler.ms.Log(fmt.Sprintf("Consumer: %s", msg.Topic))
-		ctx := NewConsumerContext(handler.ms, msg)
-		if err := handler.h(ctx); err != nil {
-			handler.ms.Log(fmt.Sprintf("Consumer error: %v", err))
-		}
-		session.MarkMessage(msg, "")
-	}
-	return nil
-}
 
 // ConsumerContext implements IContext
 type ConsumerContext struct {
@@ -280,37 +39,6 @@ func NewConsumerContext(ms *application, msg *sarama.ConsumerMessage) *ConsumerC
 // Log logs a message
 func (ctx *ConsumerContext) Log(message string, fields ...map[string]any) {
 	ctx.ms.Log(message, fields...)
-}
-
-type RecordMetadata struct {
-	TopicName      string `json:"topicName"`
-	Partition      int32  `json:"partition"`
-	ErrorCode      int    `json:"errorCode"`
-	Offset         int64  `json:"offset,omitempty"`
-	Timestamp      string `json:"timestamp,omitempty"`
-	BaseOffset     string `json:"baseOffset,omitempty"`
-	LogAppendTime  string `json:"logAppendTime,omitempty"`
-	LogStartOffset string `json:"logStartOffset,omitempty"`
-}
-
-type OptionProducerMessage struct {
-	key       string
-	headers   []map[string]string
-	Timestamp time.Time
-	Metadata  interface{}
-	Offset    int64
-	Partition int32
-}
-
-type Payload struct {
-	Header         any       `json:"header,omitempty"`
-	Body           any       `json:"body"`
-	Timestamp      time.Time // only set if kafka is version 0.10+, inner message timestamp
-	BlockTimestamp time.Time // only set if kafka is version 0.10+, outer (compressed) block timestamp
-
-	Topic     string
-	Partition int32
-	Offset    int64
 }
 
 func (ctx *ConsumerContext) CommonLog(scenario string) (logger.DetailLog, logger.SummaryLog) {
@@ -579,4 +307,36 @@ func (ctx *ConsumerContext) SendMail(mailServer MailServer, params Message) Resu
 	ctx.s.AddSuccess(node, cmdName, "200", "success")
 
 	return result
+}
+
+// ConsumerGroupHandler implements sarama.ConsumerGroupHandler
+type ConsumerGroupHandler struct {
+	ms    *application
+	h     ServiceHandleFunc
+	topic string
+}
+
+func (handler *ConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+func (handler *ConsumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+// ConsumeClaim processes messages from a claim
+func (handler *ConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	for msg := range claim.Messages() {
+		// set context
+		xTid := fmt.Sprintf("x-tid:%s:s%s", uuid.New().String(), strconv.Itoa(int(session.GenerationID())))
+		l := handler.ms.Logger.With(zap.String(XSession, xTid))
+		handler.ms.Logger = l
+
+		handler.ms.Log(fmt.Sprintf("Consumer: %s", msg.Topic))
+		ctx := NewConsumerContext(handler.ms, msg)
+		if err := handler.h(ctx); err != nil {
+			handler.ms.Log(fmt.Sprintf("Consumer error: %v", err))
+		}
+		session.MarkMessage(msg, "")
+	}
+	return nil
 }
