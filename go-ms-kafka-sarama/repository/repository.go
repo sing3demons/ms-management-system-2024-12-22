@@ -130,7 +130,7 @@ func (r *Repository[T]) Create(ctx context.Context, doc *T, detailLog logger.Det
 		return nil, fmt.Errorf("failed to insert document: %w", err)
 	}
 
-	summaryLog.AddSuccess(node, cmd, invoke, "success")
+	summaryLog.AddSuccess(node, cmd, "200", "success")
 	detailLog.AddInputRequest(node, cmd, invoke, "", map[string]interface{}{
 		"Return": insertOneResult,
 	})
@@ -207,7 +207,7 @@ func (r *Repository[T]) Find(ctx context.Context, doc Document[T], detailLog log
 		return nil, fmt.Errorf("failed to decode documents: %w", err)
 	}
 
-	summaryLog.AddSuccess(node, cmd, invoke, "success")
+	summaryLog.AddSuccess(node, cmd, "200", "success")
 	detailLog.AddInputRequest(node, cmd, invoke, "", map[string]interface{}{
 		"Return": results,
 	})
@@ -257,7 +257,7 @@ func (r *Repository[T]) FindOne(ctx context.Context, filter any, detailLog logge
 		return nil, fmt.Errorf("failed to find document: %w", err)
 	}
 
-	summaryLog.AddSuccess(node, cmd, invoke, "success")
+	summaryLog.AddSuccess(node, cmd, "200", "success")
 	detailLog.AddInputRequest(node, cmd, invoke, "", doc)
 	return &doc, nil
 }
@@ -317,14 +317,14 @@ func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLo
 	updateResult, err := r.collection.UpdateOne(ctx, doc.Filter, update, opts)
 	if err != nil {
 		summaryLog.AddError(node, cmd, invoke, err.Error())
-		detailLog.AddInputRequest(node, cmd, invoke, "", map[string]interface{}{
+		detailLog.AddInputRequest(node, cmd, invoke, "", map[string]any{
 			"Return": err.Error(),
 		})
 		return fmt.Errorf("failed to update document: %w", err)
 	}
 
-	summaryLog.AddSuccess(node, cmd, invoke, "success")
-	detailLog.AddInputRequest(node, cmd, invoke, "", map[string]interface{}{
+	summaryLog.AddSuccess(node, cmd, "200", "success")
+	detailLog.AddInputRequest(node, cmd, invoke, "", map[string]any{
 		"Return": updateResult,
 	})
 	return nil

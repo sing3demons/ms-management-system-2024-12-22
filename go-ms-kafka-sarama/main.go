@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -44,6 +45,17 @@ type Example struct {
 	DeleteAt *time.Time `json:"-" bson:"delete_at,omitempty"`
 }
 
+type Register struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+type InComingMessage struct {
+	Body struct {
+		Body Register `json:"body"`
+	} `json:"body"`
+}
+
 func main() {
 
 	db := mongo.InitMongo(mongoUri, "example")
@@ -57,11 +69,13 @@ func main() {
 
 		summaryLog.AddSuccess("kafka_consumer", "register", "", "success")
 
-		now := time.Now()
+		input := InComingMessage{}
+		json.Unmarshal([]byte(ctx.ReadInput()), &input.Body)
 
+		now := time.Now()
 		doc := Example{
 			ID:       uuid.New().String(),
-			Name:     "test",
+			Name:     input.Body.Body.Username,
 			CreateAt: &now,
 			UpdateAt: &now,
 			DeleteAt: nil,
@@ -80,7 +94,7 @@ func main() {
 				"_id": doc.ID,
 			},
 			New: Example{
-				Name:     "test update2",
+				Name:     input.Body.Body.Username,
 				UpdateAt: &upDateNow,
 			},
 			Options: map[string]any{
@@ -102,7 +116,7 @@ func main() {
 		}, detailLog, summaryLog)
 
 		err := ctx.SendMessage("service.verify", map[string]any{
-			"email": "test@dev.com",
+			"email": input.Body.Body.Email,
 		})
 		if err != nil {
 			ctx.Response(500, map[string]any{
