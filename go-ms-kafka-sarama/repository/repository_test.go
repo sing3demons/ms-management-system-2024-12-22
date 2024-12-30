@@ -2,8 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -62,15 +60,17 @@ func TestGetInvoke(t *testing.T) {
 	invoke := getInvoke()
 
 	// Check if the result starts with "mongo:"
-	if !strings.HasPrefix(invoke, MongoPrefix) {
-		t.Errorf("expected string to start with 'mongo:', got %s", invoke)
-	}
+	// if !strings.HasPrefix(invoke, MongoPrefix) {
+	// 	t.Errorf("expected string to start with 'mongo:', got %s", invoke)
+	// }
+	assert.True(t, strings.HasPrefix(invoke, MongoPrefix))
 
 	// Check if the remaining part is a valid UUID
 	_, err := uuid.Parse(invoke[len(MongoPrefix):])
-	if err != nil {
-		t.Errorf("expected a valid UUID after 'mongo:', got %s", invoke[len(MongoPrefix):])
-	}
+	// if err != nil {
+	// 	t.Errorf("expected a valid UUID after 'mongo:', got %s", invoke[len(MongoPrefix):])
+	// }
+	assert.Nil(t, err)
 }
 
 func TestGetModel(t *testing.T) {
@@ -78,9 +78,10 @@ func TestGetModel(t *testing.T) {
 	result := getModel("example", "find")
 
 	// Assert the result is as expected
-	if result != "db.example.find" {
-		t.Errorf("expected result: %v, got: %v", "db.example.find", result)
-	}
+	// if result != "db.example.find" {
+	// 	t.Errorf("expected result: %v, got: %v", "db.example.find", result)
+	// }
+	assert.Equal(t, "db.example.find", result)
 }
 
 func TestGenerateInvoke(t *testing.T) {
@@ -88,20 +89,18 @@ func TestGenerateInvoke(t *testing.T) {
 	result := generateInvoke()
 
 	// Check if the result starts with "mongo:"
-	if !strings.HasPrefix(result, MongoPrefix) {
-		t.Errorf("expected string to start with 'mongo:', got %s", result)
-	}
+	// if !strings.HasPrefix(result, MongoPrefix) {
+	// 	t.Errorf("expected string to start with 'mongo:', got %s", result)
+	// }
+	assert.True(t, strings.HasPrefix(result, MongoPrefix))
 
 	// Check if the remaining part is a valid UUID
 	// This is done by checking if the string after "mongo:" is a valid UUID
 	_, err := uuid.Parse(result[len(MongoPrefix):])
-	if err != nil {
-		t.Errorf("expected a valid UUID after 'mongo:', got %s", result[len(MongoPrefix):])
-	}
-}
-
-func mapErrMsg(str, v string) string {
-	return fmt.Sprintf("%s: %s", str, v)
+	assert.Nil(t, err)
+	// if err != nil {
+	// 	t.Errorf("expected a valid UUID after 'mongo:', got %s", result[len(MongoPrefix):])
+	// }
 }
 
 func TestFindOneSuccess(t *testing.T) {
@@ -127,11 +126,11 @@ func TestFindOneSuccess(t *testing.T) {
 
 	// Call the method under test
 	result, err := repo.FindOne(ctx, filter, logger.NewDetailLog("mock", "mock", "mock"), logger.NewSummaryLog("mock", "mock", "mock"))
-	if err != nil {
-		t.Error(mapErrMsg("unexpected error", err.Error()))
-	}
-
+	assert.Nil(t, err)
 	assert.NotNil(t, result)
+	// if err != nil {
+	// 	t.Error(mapErrMsg("unexpected error", err.Error()))
+	// }
 
 	// Verify all expectations
 	mockCollection.AssertExpectations(t)
@@ -145,14 +144,16 @@ func TestNewRepository(t *testing.T) {
 	repo := NewRepository[TestDocument](mockCollection)
 
 	// Assert that the repository is not nil
-	if repo == nil {
-		t.Errorf("expected repository to be non-nil")
-	}
+	// if repo == nil {
+	// 	t.Errorf("expected repository to be non-nil")
+	// }
+	assert.NotNil(t, repo)
 
 	// Assert that the collection in the repository is the mock collection
-	if repo.collection != mockCollection {
-		t.Errorf("expected collection: %v, got: %v", mockCollection, repo.collection)
-	}
+	assert.Equal(t, repo.collection, mockCollection)
+	// if repo.collection != mockCollection {
+	// 	t.Errorf("expected collection: %v, got: %v", mockCollection, repo.collection)
+	// }
 }
 
 func TestInsertOneSuccess(t *testing.T) {
@@ -180,11 +181,15 @@ func TestInsertOneSuccess(t *testing.T) {
 
 	// Call the method under test
 	result, err := repo.Create(ctx, document, logger.NewDetailLog("mock", "mock", "mock"), logger.NewSummaryLog("mock", "mock", "mock"))
-	if err != nil {
-		t.Error(mapErrMsg("unexpected error", err.Error()))
-	}
+	assert.Nil(t, err)
+	// if err != nil {
+	// 	t.Error(mapErrMsg("unexpected error", err.Error()))
+	// }
 
 	assert.NotNil(t, result)
+	assert.Equal(t, result.ID, mockResult.InsertedID)
+	assert.Nil(t, err)
+	assert.Equal(t, result.Name, document.Name)
 
 	// Verify all expectations
 	mockCollection.AssertExpectations(t)
@@ -212,10 +217,17 @@ func TestDeleteOneSuccess(t *testing.T) {
 	}
 
 	// Call the method under test
-	err := repo.DeleteOne(ctx, filter, logger.NewDetailLog("mock", "mock", "mock"), logger.NewSummaryLog("mock", "mock", "mock"))
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	updateResult, err := repo.DeleteOne(ctx, filter, logger.NewDetailLog("mock", "mock", "mock"), logger.NewSummaryLog("mock", "mock", "mock"))
+	// if err != nil {
+	// 	t.Errorf("unexpected error: %v", err)
+	// }
+	assert.Nil(t, err)
+
+	assert.Equal(t, updateResult.MatchedCount, mockResult.MatchedCount)
+	assert.Equal(t, updateResult.ModifiedCount, mockResult.ModifiedCount)
+	assert.Nil(t, err)
+	assert.NotNil(t, updateResult)
+	assert.Equal(t, updateResult.Acknowledged, mockResult.Acknowledged)
 
 	// Verify all expectations
 	mockCollection.AssertExpectations(t)
@@ -265,12 +277,66 @@ func TestRemoveEmptyFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := RemoveEmptyFields(tt.input)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("expected: %v, got: %v", tt.expected, result)
-			}
+			assert.Nil(t, err)
+			// if err != nil {
+			// 	t.Errorf("unexpected error: %v", err)
+			// }
+			assert.Equal(t, tt.expected, result)
+			// if !reflect.DeepEqual(result, tt.expected) {
+			// 	t.Errorf("expected: %v, got: %v", tt.expected, result)
+			// }
 		})
 	}
+}
+
+func TestUpdateOneSuccess(t *testing.T) {
+	ctx := context.TODO()
+	filter := bson.M{"_id": "12345"}
+	document := TestDocument{
+		ID:   "12345",
+		Name: "Updated Name",
+	}
+	updateDoc := Document[TestDocument]{
+		Filter: filter,
+		New:    document,
+		Options: map[string]any{
+			"upsert": true,
+		},
+	}
+
+	// Create a mock collection
+	mockCollection := new(MockCollection)
+
+	// Mock the UpdateOne method to simulate the response
+	mockResult := &mongo.UpdateResult{
+		MatchedCount:  1,
+		ModifiedCount: 1,
+	}
+
+	// Set up the mock behavior
+	mockCollection.On("UpdateOne", ctx, filter, mock.Anything, mock.Anything).Return(mockResult, nil)
+
+	// Inject the mock collection into the repository
+	repo := &Repository[TestDocument]{
+		collection: mockCollection,
+	}
+
+	// Call the method under test
+	updateResult, err := repo.UpdateOne(ctx, updateDoc, logger.NewDetailLog("mock", "mock", "mock"), logger.NewSummaryLog("mock", "mock", "mock"))
+	assert.Nil(t, err)
+	// if err != nil {
+	// 	t.Errorf("unexpected error: %v", err)
+	// }
+
+	assert.NotNil(t, updateResult)
+	assert.Equal(t, updateResult.MatchedCount, mockResult.MatchedCount)
+	assert.Equal(t, updateResult.ModifiedCount, mockResult.ModifiedCount)
+
+	assert.Equal(t, updateDoc.New, document)
+	assert.Equal(t, updateDoc.Filter, filter)
+	assert.Equal(t, updateDoc.Options, map[string]any{"upsert": true})
+	// assert.Equal(t,)
+
+	// Verify all expectations
+	mockCollection.AssertExpectations(t)
 }

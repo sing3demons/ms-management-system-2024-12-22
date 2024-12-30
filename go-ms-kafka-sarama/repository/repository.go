@@ -261,7 +261,7 @@ func (r *Repository[T]) FindOne(ctx context.Context, filter any, detailLog logge
 	return &doc, nil
 }
 
-func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLog logger.DetailLog, summaryLog logger.SummaryLog) error {
+func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLog logger.DetailLog, summaryLog logger.SummaryLog) (*mongo.UpdateResult, error) {
 	cmd := "updateOne"
 	collectionName := r.collection.Name()
 	method := "updateOne"
@@ -274,7 +274,7 @@ func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLo
 	// delete empty fields in the document
 	newDoc, err := RemoveEmptyFields(doc.New)
 	if err != nil {
-		return fmt.Errorf("failed to update document: %w", err)
+		return nil, fmt.Errorf("failed to remove empty fields: %w", err)
 	}
 	newDoc["update_at"] = time.Now()
 
@@ -318,14 +318,14 @@ func (r *Repository[T]) UpdateOne(ctx context.Context, doc Document[T], detailLo
 		detailLog.AddInputRequest(node, cmd, invoke, "", map[string]any{
 			"Return": err.Error(),
 		})
-		return fmt.Errorf("failed to update document: %w", err)
+		return nil, fmt.Errorf("failed to update document: %w", err)
 	}
 
 	summaryLog.AddSuccess(node, cmd, "200", "success")
 	detailLog.AddInputRequest(node, cmd, invoke, "", map[string]any{
 		"Return": updateResult,
 	})
-	return nil
+	return updateResult, nil
 }
 
 func RemoveEmptyFields[T any](input T) (map[string]interface{}, error) {
@@ -364,7 +364,7 @@ func isEmpty(value interface{}) bool {
 	}
 }
 
-func (r *Repository[T]) DeleteOne(ctx context.Context, filter any, detailLog logger.DetailLog, summaryLog logger.SummaryLog) error {
+func (r *Repository[T]) DeleteOne(ctx context.Context, filter any, detailLog logger.DetailLog, summaryLog logger.SummaryLog) (*mongo.UpdateResult, error) {
 	cmd := "deleteOne"
 	collectionName := r.collection.Name()
 	method := "updateOne"
@@ -405,12 +405,12 @@ func (r *Repository[T]) DeleteOne(ctx context.Context, filter any, detailLog log
 		detailLog.AddInputRequest(node, cmd, invoke, "", map[string]any{
 			"Return": err.Error(),
 		})
-		return fmt.Errorf("failed to delete document: %w", err)
+		return nil, fmt.Errorf("failed to delete document: %w", err)
 	}
 
 	summaryLog.AddSuccess(node, cmd, "200", "success")
 	detailLog.AddInputRequest(node, cmd, invoke, "", map[string]any{
 		"Return": deleteResult,
 	})
-	return nil
+	return deleteResult, nil
 }
