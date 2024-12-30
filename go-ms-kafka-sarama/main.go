@@ -1,11 +1,15 @@
 package main
 
 import (
+	"os"
+
 	"github.com/sing3demons/logger-kp/logger"
 	"github.com/sing3demons/saram-kafka/handler"
 	"github.com/sing3demons/saram-kafka/microservice"
 	"github.com/sing3demons/saram-kafka/mongo"
 	"github.com/sing3demons/saram-kafka/repository"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func init() {
@@ -33,15 +37,21 @@ const (
 )
 
 func main() {
+	zapLogger := zap.New(
+		zapcore.NewCore(
+			zapcore.NewConsoleEncoder(zapcore.EncoderConfig{
+				MessageKey: "msg",
+			}),
+			zapcore.AddSync(os.Stdout),
+			zap.InfoLevel))
 
 	db := mongo.InitMongo(mongoUri, "example")
-	repo := repository.NewRepository[handler.Example](db.Collection("example"))
-	h := handler.NewHandler(repo)
-
-	ms := microservice.NewApplication(servers, groupID)
+	collection := db.Collection("example")
+	repo := repository.NewRepository[handler.Example](collection)
+	ms := microservice.NewApplication(servers, groupID, zapLogger)
 	ms.Log("Starting microservice")
 
-	ms.Consume(ServiceRegisterTopic, h.HandlerRegister)
+	ms.Consume(ServiceRegisterTopic, handler.NewHandler(repo).HandlerRegister)
 
 	ms.Start()
 }

@@ -96,12 +96,18 @@ type IContext interface {
 type ServiceHandleFunc func(ctx IContext) error
 
 // NewMicroservice is the constructor function of Microservice
-func NewApplication(brokers, groupID string) IApplication {
-	return &application{
+func NewApplication(brokers, groupID string, log ...*zap.Logger) IApplication {
+	app := &application{
 		brokers: strings.Split(brokers, ","),
 		groupID: groupID,
 		Logger:  logger.NewLogger(),
 	}
+
+	if len(log) > 0 {
+		app.Logger = log[0]
+	}
+
+	return app
 }
 
 // Start starts the microservice
