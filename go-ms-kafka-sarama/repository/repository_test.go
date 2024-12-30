@@ -133,14 +133,10 @@ func TestFindOneSuccess(t *testing.T) {
 
 	assert.NotNil(t, result)
 
-	// Assert the result is as expected
-	// if result != mockResult {
-	// 	t.Errorf("expected result: %v, got: %v", mockResult, result)
-	// }
-
 	// Verify all expectations
 	mockCollection.AssertExpectations(t)
 }
+
 func TestNewRepository(t *testing.T) {
 	// Create a mock collection
 	mockCollection := new(MockCollection)
@@ -188,12 +184,7 @@ func TestInsertOneSuccess(t *testing.T) {
 		t.Error(mapErrMsg("unexpected error", err.Error()))
 	}
 
-	_ = result
-
-	// Assert the result is as expected
-	// if result != mockResult {
-	// 	t.Errorf("expected result: %v, got: %v", mockResult, result)
-	// }
+	assert.NotNil(t, result)
 
 	// Verify all expectations
 	mockCollection.AssertExpectations(t)
