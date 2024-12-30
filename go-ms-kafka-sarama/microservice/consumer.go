@@ -50,11 +50,14 @@ func (ctx *ConsumerContext) CommonLog(scenario string) (logger.DetailLog, logger
 
 	// ctx.message convert to json
 	data := Payload{
-		Timestamp:      ctx.msg.Timestamp,
-		Topic:          ctx.msg.Topic,
-		Partition:      ctx.msg.Partition,
-		Offset:         ctx.msg.Offset,
-		BlockTimestamp: ctx.msg.BlockTimestamp,
+		Timestamp: ctx.msg.Timestamp,
+		Topic:     ctx.msg.Topic,
+		Partition: ctx.msg.Partition,
+		Offset:    ctx.msg.Offset,
+	}
+
+	if !ctx.msg.Timestamp.IsZero() {
+		data.Timestamp = ctx.msg.Timestamp
 	}
 	json.Unmarshal(ctx.msg.Value, &data.Body)
 
