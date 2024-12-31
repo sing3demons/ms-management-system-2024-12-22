@@ -45,7 +45,11 @@ func main() {
 			zapcore.AddSync(os.Stdout),
 			zap.InfoLevel))
 
-	db := mongo.InitMongo(mongoUri, "example")
+	db, err := mongo.InitMongo(mongoUri, "example")
+	if err != nil {
+		zapLogger.Fatal("Failed to connect to MongoDB", zap.Error(err))
+		os.Exit(1)
+	}
 	collection := db.Collection("example")
 	repo := repository.NewRepository[handler.Example](collection)
 	ms := microservice.NewApplication(servers, groupID, zapLogger)
