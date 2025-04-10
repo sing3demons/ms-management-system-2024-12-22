@@ -20,7 +20,9 @@ type TP<T extends string> = {
 }
 
 type ExtractParamsFromPath<T extends string[]> = { [K in T[number]]: string }
+
 type U = unknown
+
 type MaybePromise = Promise<U> | U
 type TParam<T extends string> = ExtractParamsFromPath<ExtractParams<T>>
 type TS = TSchema
@@ -178,8 +180,8 @@ class BaseRoute {
           params: req.params,
           body: req.body,
           query: req.query,
-          req: req as Request,
-          res: res as Response,
+          req: req,
+          res: res,
           next,
         }
 
@@ -203,7 +205,7 @@ class BaseRoute {
   private handleError(error: unknown, req: Request, res: Response) {
     const detailLog = req.detailLog
     const summaryLog = req.summaryLog
-    const cmd = detailLog.detailLog?.Input[0]?.Event?.split('.')[1] || ''
+    const cmd = detailLog.detailLog?.Input[0]?.Event?.split('.')[1] ?? ''
     if (error instanceof Object) {
       const err = error as { path: string; message: string }
       if (err.path && err.message) {
@@ -232,9 +234,9 @@ class BaseRoute {
         if (detailLog.startTimeDate) {
           detailLog.addOutputResponse(NODE_NAME.CLIENT, cmd, '', '', code).end()
         }
-        summaryLog.addField('result_code', code.statusCode || code.status || 500)
+        summaryLog.addField('result_code', code.statusCode ?? code.status ?? 500)
         summaryLog.end('500', 'error')
-        res.status(code.statusCode || code.status || 500).json(error)
+        res.status(code.statusCode ?? code.status ?? 500).json(error)
       }
     } else if (error instanceof Error) {
       if (detailLog.startTimeDate) {
@@ -278,7 +280,7 @@ class BaseRoute {
         const invoke = req.invoke
         req.detailLog = new DetailLog(session, invoke)
         req.summaryLog = new SummaryLog(session, invoke)
-        const cmd = schemas?.cmd || `${req.method}${req.originalUrl}`.replace(/\//g, '_').replace('__', '_').toLowerCase()
+        const cmd = schemas?.cmd ?? `${req.method}${req.originalUrl}`.replace(/\//g, '_').replace('__', '_').toLowerCase()
 
         req.detailLog.addInputRequest(NODE_NAME.CLIENT, cmd, '', req)
         this.validateRequest(req, schemas)
@@ -290,7 +292,13 @@ class BaseRoute {
   }
 }
 
+// Map to store and retrieve routes by their path
 const routeMap = new Map<string, Route<string, any, any>>()
+
+// Example usage of routeMap to retrieve a route by its path
+function getRouteByPath(path: string): Route<string, any, any> | undefined {
+  return routeMap.get(path)
+}
 
 class AppRouter extends BaseRoute {
   constructor(private readonly instance: Router = Router()) {
@@ -320,7 +328,7 @@ class AppRouter extends BaseRoute {
 
       if (Object.keys(schemaObject.properties).length) {
         if (!schema?.params) {
-          schema.params = schemaObject as TS
+          schema.params = schemaObject
         }
       }
 
@@ -394,30 +402,9 @@ class AppServer implements IServer {
           req.detailLog = null as unknown as DetailLog
         }
         if (!req?.summaryLog?.isEnd()) {
-          const result_desc =
-            res.statusCode === 200 || res.statusCode === 201
-              ? ''
-              : res.statusCode === 404
-              ? 'not_found'
-              : res.statusCode === 400
-              ? 'bad_request'
-              : res.statusCode === 401
-              ? 'unauthorized'
-              : res.statusCode === 403
-              ? 'forbidden'
-              : res.statusCode === 405
-              ? 'method_not_allowed'
-              : res.statusCode === 409
-              ? 'conflict'
-              : res.statusCode === 422
-              ? 'unprocessable_entity'
-              : res.statusCode === 429
-              ? 'too_many_requests'
-              : res.statusCode === 500
-              ? 'internal_server_error'
-              : 'unknown'
+          const result_desc = getResultDescription(res.statusCode)
 
-          if (!!result_desc) {
+          if (result_desc) {
             req.summaryLog.addField('message', result_desc)
           }
 
@@ -490,6 +477,34 @@ class AppServer implements IServer {
         }, 10000)
       })
     })
+  }
+}
+
+function getResultDescription(statusCode: number): string {
+  switch (statusCode) {
+    case 200:
+    case 201:
+      return '';
+    case 404:
+      return 'not_found';
+    case 400:
+      return 'bad_request';
+    case 401:
+      return 'unauthorized';
+    case 403:
+      return 'forbidden';
+    case 405:
+      return 'method_not_allowed';
+    case 409:
+      return 'conflict';
+    case 422:
+      return 'unprocessable_entity';
+    case 429:
+      return 'too_many_requests';
+    case 500:
+      return 'internal_server_error';
+    default:
+      return 'unknown';
   }
 }
 

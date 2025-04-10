@@ -142,7 +142,7 @@ async function requestHttp<T extends RA>(
             if (error.code === 'ECONNABORTED') {
               result_code = 'ret=4'
               _error = 'timeout'
-            } else if (['ENOTFOUND', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'ENETUNREACH'].includes(error.code || '')) {
+            } else if (['ENOTFOUND', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'ENETUNREACH'].includes(error.code ?? '')) {
               result_code = 'ret=1'
               _error = 'connection error'
             } else {

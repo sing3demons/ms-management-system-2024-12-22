@@ -1,5 +1,5 @@
 import { IConfig } from '../config.js'
-import { Context, AppRoutes, ErrorValidator, IServer, SchemaCtx, HandlerConsumer, SchemaRoutes } from './route.js'
+import { Context, AppRoutes, ErrorValidator, IServer, SchemaCtx } from './route.js'
 import { Type as t } from '@sinclair/typebox'
 
 import express, { Response, Request, NextFunction, Express } from 'express'
@@ -9,7 +9,6 @@ import NODE_NAME from '../constants/nodeName.js'
 import { generateXTid } from '../v1/route.js'
 import useragent from 'useragent'
 import { v4 as uuid } from 'uuid'
- import { kafka } from '../kafka.js'
 import { MessageHandler, ServerKafka } from '../../kafka_server.js'
 import { loadLogConfig } from '../logger/logger.js'
 
@@ -24,7 +23,7 @@ class ExpressServer extends AppRoutes implements IServer {
     this.express.use(express.json())
     this.express.use(express.urlencoded({ extended: true }))
     this.express.use((req: Request, _res: Response, next: NextFunction) => {
-      const agent = useragent.parse(req.headers['user-agent'] || '')
+      const agent = useragent.parse(req.headers['user-agent'])
       req.deviceInfo = {
         browser: agent.family,
         version: agent.toVersion(),
@@ -76,8 +75,6 @@ class ExpressServer extends AppRoutes implements IServer {
         firstCmd = scenario
         req.detailLog = logs.detailLog
         req.summaryLog = logs.summaryLog
-        // this.detailLog = logs.detailLog
-        // this.summaryLog = logs.summaryLog
         return logs
       },
       response: (code: number, data: any) => {
@@ -94,15 +91,13 @@ class ExpressServer extends AppRoutes implements IServer {
     return context
   }
 
-  private logResponse(req: Request, scenario: string, initInvoke: string, data: any, code: number) {
-    req.detailLog?.addOutputRequest(NODE_NAME.CLIENT, scenario, initInvoke, '', data)?.end()
+  private logResponse(req: { detailLog?: any; summaryLog?: any }, scenario: string, initInvoke: string, data: any, code: number) {
+    const logFramework = 'Fastify';
+    req.detailLog?.addOutputRequest(`${NODE_NAME.CLIENT} (${logFramework})`, scenario, initInvoke, '', data)?.end()
 
     if (!req.summaryLog?.isEnd) {
-      req.summaryLog.end(`${code}`, '')
+      req.summaryLog.end(`${code} (${logFramework})`, '')
     }
-
-    // delete this.detailLog
-    // delete this.summaryLog
   }
 
   private sendErrorResponse(res: Response, error: any): void {
@@ -138,7 +133,7 @@ class ExpressServer extends AppRoutes implements IServer {
       })
     })
 
-    const port = process.env?.PORT?.split(':').pop() || '3000'
+    const port = process.env?.PORT?.split(':').pop() ?? '3000'
 
     this.express.listen(port, () => {
       cb ? cb() : console.log(`Server is running on port ${port}`)
@@ -147,7 +142,7 @@ class ExpressServer extends AppRoutes implements IServer {
   private cleanupResources(req: Request) {
     if (req.detailLog) {
       try {
-        ;(req.detailLog as any)?.finalize?.()
+        ; (req.detailLog as any)?.finalize?.()
       } catch (error) {
         console.error('Error finalizing detail log:', error)
       }
@@ -155,27 +150,26 @@ class ExpressServer extends AppRoutes implements IServer {
 
     if (req.summaryLog) {
       try {
-        ;(req.summaryLog as any)?.finalize?.()
+        ; (req.summaryLog as any)?.finalize?.()
       } catch (error) {
         console.error('Error finalizing summary log:', error)
       }
     }
   }
 
-  public async consume(topic: string, handler: MessageHandler) {
+  public consume(topic: string, handler: MessageHandler): void {
     this.serverKafka.addHandler(topic, handler)
   }
 }
 
 class FastifyServer extends AppRoutes implements IServer {
-  private readonly fastify: FastifyInstance
+  private readonly fastify: FastifyInstance = Fastify()
   private readonly serverKafka: ServerKafka
   constructor() {
     super()
-    this.fastify = Fastify()
 
     this.fastify.addHook('onRequest', (req: FastifyRequest, _res: FastifyReply, done: HookHandlerDoneFunction) => {
-      const agent = useragent.parse(req.headers['user-agent'] || '')
+      const agent = useragent.parse(req.headers['user-agent'])
       req.deviceInfo = {
         browser: agent.family,
         version: agent.toVersion(),
@@ -242,7 +236,7 @@ class FastifyServer extends AppRoutes implements IServer {
     return context
   }
 
-  private logResponse(req: FastifyRequest, scenario: string, initInvoke: string, data: any, code: number) {
+  private logResponse(req: { detailLog?: any; summaryLog?: any }, scenario: string, initInvoke: string, data: any, code: number) {
     req.detailLog?.addOutputRequest(NODE_NAME.CLIENT, scenario, initInvoke, '', data)?.end()
 
     if (!req.summaryLog?.isEnd) {
@@ -251,12 +245,14 @@ class FastifyServer extends AppRoutes implements IServer {
   }
 
   public register(...routes: AppRoutes[]): this {
-    this._RoutesMetadata.push(...routes.flatMap((r) => r.routes()))
+    for (const route of routes) {
+      this._RoutesMetadata.push(...route.routes());
+    }
 
-    return this
+    return this;
   }
 
-  public async consume(topic: string, handler: MessageHandler) {
+  public consume(topic: string, handler: MessageHandler): void {
     this.serverKafka.addHandler(topic, handler)
   }
 
@@ -282,7 +278,7 @@ class FastifyServer extends AppRoutes implements IServer {
       })
     })
 
-    const port = process.env?.PORT?.split(':').pop() || '3000'
+    const port = process.env?.PORT?.split(':').pop() ?? '3000'
     const _start = async () => {
       try {
         const opts: FastifyListenOptions = {
@@ -297,16 +293,16 @@ class FastifyServer extends AppRoutes implements IServer {
     }
 
     this.serverKafka.listen((err) => {
-        if (err) {
-          console.log('Error:', err)
-          return
-        }
-  
-        console.log('Kafka server is running')
-      })
+      if (err) {
+        console.log('Error:', err)
+        return
+      }
+
+      console.log('Kafka server is running')
+    })
 
     _start()
-   
+
   }
 }
 
@@ -323,7 +319,7 @@ const framework = {
 type TFramework = keyof typeof framework
 
 class AppServer {
-  constructor(private readonly framework: TFramework) {}
+  constructor(private readonly framework: TFramework) { }
 
   load = (config: IConfig) => {
     if (config) {

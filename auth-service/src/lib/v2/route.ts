@@ -4,7 +4,6 @@ import DetailLog from '../logger/detail.js'
 import SummaryLog from '../logger/summary.js'
 import generateInternalTid from '../utils/generateInternalTid.js'
 import NODE_NAME from '../constants/nodeName.js'
-import { kafka } from '../kafka.js'
 import { MessageHandler } from '../../kafka_server.js'
 
 type ExtractParams<Path extends string> = Path extends `${string}:${infer ParamName}/${infer Rest}`
@@ -96,7 +95,6 @@ type TRoutesMetadata = {
 class AppRoutes {
   protected readonly transaction = 'x-tid'
   protected readonly session = 'x-session'
-  constructor() {}
 
   public init(cb: Function): this {
     cb()
@@ -154,20 +152,20 @@ class AppRoutes {
     return { detailLog, summaryLog, initInvoke }
   }
 
-  private funcGetParams(url: string, route: string): Record<string, string> {
-    const routeParts = route.split('/').filter(Boolean)
-    const urlParts = url.split('/').filter(Boolean)
+  // private funcGetParams(url: string, route: string): Record<string, string> {
+  //   const routeParts = route.split('/').filter(Boolean)
+  //   const urlParts = url.split('/').filter(Boolean)
 
-    const params: Record<string, string> = {}
+  //   const params: Record<string, string> = {}
 
-    routeParts.forEach((part, index) => {
-      if (part.startsWith(':')) {
-        params[part.substring(1)] = urlParts[index] || ''
-      }
-    })
+  //   routeParts.forEach((part, index) => {
+  //     if (part.startsWith(':')) {
+  //       params[part.substring(1)] = urlParts[index] ?? ''
+  //     }
+  //   })
 
-    return params
-  }
+  //   return params
+  // }
 
   public get<PathName extends `/${string}`, Schema extends SchemaRoutes>(
     path: PathName,

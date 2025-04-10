@@ -15,11 +15,7 @@ function generateInternalTid(node_name: string, symbol: string, length: number) 
     const digitsNonDate = length - currentDate.length
     if (digitsNonDate > 0) {
       const randomDigit = digitsNonDate - (lengthOfNodeName + lengthOfSymbol)
-      if (randomDigit > 0) {
-        internalTid = node_name + symbol + currentDate + genNanoId(randomDigit)
-      } else {
-        internalTid = node_name + symbol + currentDate
-      }
+      internalTid = node_name + symbol + currentDate + genNanoId(randomDigit > 0 ? randomDigit : 0)
     }
   } else {
     internalTid = genNanoId(length)

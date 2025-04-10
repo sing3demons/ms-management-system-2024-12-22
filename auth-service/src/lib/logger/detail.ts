@@ -9,16 +9,16 @@ export default class DetailLog {
   private outputTime: Date | null = null
   private timeCounter: { [key: string]: Date } = {}
   public detailLog: IDetailLog
-  private conf: LogConfig = confLog
+  private readonly conf: LogConfig = confLog
   constructor(session: string, initInvoke?: string, scenario?: string, identity?: string) {
     this.detailLog = {
       LogType: 'Detail',
       Host: os.hostname(),
-      AppName: this.conf.projectName || '',
+      AppName: this.conf.projectName ?? '',
       Instance: process.pid,
       Session: session,
-      InitInvoke: initInvoke || this.conf.projectName + `_${dayjs().format('yyyymmddHHMMss')}`,
-      Scenario: scenario || '',
+      InitInvoke: initInvoke ?? this.conf.projectName + `_${dayjs().format('yyyymmddHHMMss')}`,
+      Scenario: scenario ?? '',
       InputTimeStamp: null,
       Input: [],
       OutputTimeStamp: null,
@@ -36,46 +36,64 @@ export default class DetailLog {
   isRawDataEnabled(): boolean {
     return this.conf.detail.rawData === true
   }
-  private maskingConfig: MaskingConfig = {
+  private readonly maskingConfig: MaskingConfig = {
     highlight: ['email', 'phone'],
     mark: ['password', 'pin', 'otp', 'token', 'secret', 'api-key'],
   }
 
   private maskSensitiveData<T>(body: T): T {
     if (!body) {
-      return body
-    } else if (typeof body === 'string') {
-      try {
-        const parsedBody = JSON.parse(body)
-        const data = JSON.stringify(this.maskSensitiveData(parsedBody))
-        return data as T
-      } catch (error) {
-        return body
-      }
-    } else if (typeof body === 'object') {
-      const data = JSON.parse(JSON.stringify(body)) // Clone the object to avoid modifying the original data
-      const maskedData: any = Array.isArray(data) ? [] : {}
-
-      for (const key in data) {
-        if (data.hasOwnProperty(key)) {
-          // Check if the key is in 'mark' (full mask) or 'highlight' (partial mask)
-          if (this.maskingConfig?.mark?.includes(key)) {
-            maskedData[key] = '******' // Fully mask fields in 'mark'
-          } else if (this.maskingConfig?.highlight?.includes(key)) {
-            maskedData[key] = this.applyPartialMask(data[key]) // Partially mask fields in 'highlight'
-          } else if (typeof data[key] === 'object') {
-            // Recursively mask nested objects
-            maskedData[key] = this.maskSensitiveData(data[key])
-          } else {
-            maskedData[key] = data[key]
-          }
-        }
-      }
-
-      return maskedData
-    } else {
-      return body
+      return body;
     }
+
+    if (typeof body === 'string') {
+      return this.maskStringData(body) as T;
+    }
+
+    if (typeof body === 'object') {
+      return this.maskObjectData(body) as T;
+    }
+
+    return body;
+  }
+
+  private maskStringData(body: string): string {
+    try {
+      const parsedBody = JSON.parse(body);
+      const data = JSON.stringify(this.maskSensitiveData(parsedBody));
+      return data;
+    } catch (error) {
+      return body;
+    }
+  }
+
+  private maskObjectData<T>(body: T): T {
+    const data = JSON.parse(JSON.stringify(body)); // Clone the object to avoid modifying the original data
+    const maskedData: any = Array.isArray(data) ? [] : {};
+
+    for (const key in data) {
+      if (data.hasOwnProperty(key)) {
+        maskedData[key] = this.maskField(key, data[key]);
+      }
+    }
+
+    return maskedData;
+  }
+
+  private maskField(key: string, value: any): any {
+    if (this.maskingConfig?.mark?.includes(key)) {
+      return '******'; // Fully mask fields in 'mark'
+    }
+
+    if (this.maskingConfig?.highlight?.includes(key)) {
+      return this.applyPartialMask(value); // Partially mask fields in 'highlight'
+    }
+
+    if (typeof value === 'object') {
+      return this.maskSensitiveData(value); // Recursively mask nested objects
+    }
+
+    return value;
   }
   private applyPartialMask(value: string): string {
     const rex = new RegExp(/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/)
@@ -97,7 +115,7 @@ export default class DetailLog {
     return value.length > 2 ? value.substring(0, 2) + '*'.repeat(value.length - 2) : value
   }
 
-  private validateData = (data: any): boolean => {
+  private readonly validateData = (data: any): boolean => {
     const { headers, params, query, body } = data
 
     if (headers) return true
@@ -180,7 +198,7 @@ export default class DetailLog {
       delete this.timeCounter[invoke]
     } else if (type.startsWith('res')) {
       if (this.timeCounter[invoke]) {
-        resTime = this.inputTime!.getTime() - this.timeCounter[invoke]!.getTime()
+        resTime = this.inputTime.getTime() - this.timeCounter[invoke].getTime()
         resTime = resTime + ' ms'
         delete this.timeCounter[invoke]
       }

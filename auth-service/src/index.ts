@@ -30,6 +30,7 @@ router.get(
     }
 
     const resp = await produceMessage('service.register', data, detailLog, summaryLog)
+    console.log('resp', resp)
     summaryLog.end('', 'success')
 
     return response(201, {

@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
 
- import os from 'os'
+import os from 'os'
 import { BlockDetail, LogConfig, OptionalFields } from './types.js';
 import { confLog, writeLogFile } from './logger.js';
 
